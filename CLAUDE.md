@@ -33,12 +33,14 @@ macOS users with Claude Code. Linux/Windows works for Yad2-only; the Facebook pa
 Greet and present the choice. **Wait for an explicit answer** — even if the user said something earlier that hints at a preference, ask again here.
 
 > **Recommended: Yad2 only** ⭐
-> 5 minutes. Catches ~90% of relevant listings. No browser configuration.
+> ~5-10 minutes. Catches ~90% of relevant listings. Requires a dedicated Chrome + a single Yad2 login (so Yad2's bot protection lets us scrape).
 >
 > **Advanced: Yad2 + Facebook groups**
-> 10-15 minutes. Catches the extra ~10% from Facebook. Requires launching a dedicated Chrome and logging in.
+> ~15-20 minutes. Adds the extra ~10% from Facebook. Same Chrome setup as above, plus a Facebook login (the slow part — FB's login flow is the most annoying step in the wizard).
 
-If they're unsure, recommend Yad2-only — they can add Facebook later.
+Both paths need the dedicated debug Chrome (a separate Chrome instance with its own profile that runs alongside the user's daily Chrome — won't touch their bookmarks/history). The only difference is whether they also log into Facebook in that Chrome.
+
+If they're unsure, recommend Yad2-only — they can add Facebook later by re-running the wizard or asking you.
 
 ### Step 1 — Prerequisites
 
@@ -71,26 +73,59 @@ If they want a different port too (e.g., 5056 because something else is on 5055)
 ./scripts/configure_env.sh ANTHROPIC_API_KEY=<key> APT_RADAR_PORT=5056
 ```
 
-### Step 4 — (Facebook path only) Launch debug Chrome + enable FB
+### Step 4 — Launch the debug Chrome (both paths)
 
-Skip if Yad2-only — leave `facebook_enabled` at its default `False`.
+Tell the user: "I'm going to launch a separate Chrome instance just for Apt Radar. It has its own profile so it won't touch your daily Chrome, bookmarks, or history. A new Chrome window will pop up briefly. OK to proceed?"
 
-Tell them: "I'll launch a dedicated Chrome with its own profile, just for Apt Radar. It won't touch your daily Chrome."
+Wait for their OK, then:
 
-1. Have them quit any open Chrome (Cmd+Q from menu — not just closing windows).
-2. Run `./start_chrome_debug.sh`. Chrome opens to facebook.com.
-3. Say: "Log into Facebook in that window. Tell me when you're done."
-4. Verify: `curl -s http://127.0.0.1:9222/json/version` returns JSON.
+```bash
+./start_chrome_debug.sh
+```
 
-If verification fails, see "Chrome troubleshooting" at the bottom.
+The script launches a new Chrome with `--remote-debugging-port=9222 --user-data-dir=./debug_chrome_profile` and waits for the port to bind. It opens to facebook.com by default — that's fine even for Yad2-only users, we navigate the tab in the next step.
 
-**Then turn on the FB toggle** in settings so the scanner knows the user opted in:
+Verify CDP is reachable:
+
+```bash
+curl -s http://127.0.0.1:9222/json/version
+```
+
+Should return JSON with a `Browser` field. If it doesn't, see "Chrome troubleshooting" at the bottom.
+
+### Step 5 — Log the user into Yad2 (both paths)
+
+Navigate the debug Chrome to Yad2 via CDP. You can use Python:
+
+```bash
+./.venv/bin/python3 << 'PYEOF'
+import json, requests
+from websocket import create_connection
+ws_url = requests.get("http://127.0.0.1:9222/json/version").json()["webSocketDebuggerUrl"]
+ws = create_connection(ws_url)
+ws.send(json.dumps({"id": 1, "method": "Target.createTarget", "params": {"url": "https://www.yad2.co.il/auth/login"}}))
+print(ws.recv())
+ws.close()
+PYEOF
+```
+
+Then tell the user: "I just opened Yad2's login page in the debug Chrome. Log in there. Tell me when you're done."
+
+Wait for their confirmation, then verify login. You can navigate a tab to yad2.co.il and read the page DOM, looking for the user's profile menu (a logged-in indicator) vs. the "Log in" / "התחבר" button (logged-out). Don't block the wizard on a perfect verification — if you can't tell, just trust them and move on.
+
+### Step 5b — Log the user into Facebook (Yad2+FB path only)
+
+Skip if Yad2-only.
+
+Same idea: navigate a debug Chrome tab to facebook.com via CDP, tell the user to log in, wait, verify (or trust).
+
+Then turn on the FB toggle in settings so the scanner uses Facebook on scans:
 
 ```bash
 ./.venv/bin/python3 -c "from settings import save_settings; save_settings({'facebook_enabled': True})"
 ```
 
-This sets `facebook_enabled: True` in `settings.json`. When the user later visits `/settings`, the FB section will show as ON and pre-expanded.
+This sets `facebook_enabled: True` in `settings.json`. The dashboard /settings page will show the FB section ON and pre-expanded.
 
 ### Step 5 — Start the dashboard
 
@@ -193,10 +228,10 @@ Tell them:
 ## Chrome troubleshooting
 
 If `curl localhost:9222/json/version` fails after `start_chrome_debug.sh`:
-1. Confirm prior Chrome is fully quit (Cmd+Q, not window close)
-2. Check the new Chrome window opened
-3. Check `debug_chrome_profile/` directory was created
-4. Re-run `start_chrome_debug.sh`
+1. Check that a new Chrome window actually opened
+2. Check `debug_chrome_profile/` directory was created
+3. If their daily Chrome was running and somehow absorbed the launch: have them quit Chrome completely (Cmd+Q from menu) and re-run the script. `--user-data-dir` usually prevents this but rare macOS configurations can override.
+4. Re-run `./start_chrome_debug.sh`
 
 ## Operations
 

@@ -16,19 +16,15 @@ if curl -s -m 2 "http://127.0.0.1:$PORT/json/version" > /dev/null 2>&1; then
     exit 0
 fi
 
-# If any other Chrome is running, the debug flag will be ignored on a new launch.
-if pgrep -x "Google Chrome" > /dev/null; then
-    echo "ERROR: Chrome is already running, but not in debug mode."
-    echo "Quit Chrome completely first (Cmd+Q from the Chrome menu — not just closing windows),"
-    echo "then re-run this script."
-    exit 1
-fi
-
 if [ ! -e "$CHROME_APP" ]; then
     echo "ERROR: Google Chrome not found at $CHROME_APP"
     echo "Install Chrome from https://www.google.com/chrome/ and try again."
     exit 1
 fi
+
+# Note: we DON'T need to quit the user's existing Chrome. The --user-data-dir
+# flag makes this a fully separate Chrome instance with its own profile —
+# it runs alongside their daily Chrome without affecting it.
 
 mkdir -p "$PROFILE_DIR"
 
@@ -49,5 +45,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     fi
 done
 
-echo "Chrome launched, but the debug port is not responding yet."
-echo "Wait a few seconds, then check: curl http://127.0.0.1:$PORT/json/version"
+echo "Chrome launched, but the debug port is not responding after 10 seconds."
+echo "If your daily Chrome was already running, it may have absorbed this launch."
+echo "Try: quit Chrome completely (Cmd+Q) and re-run this script."
+exit 1
