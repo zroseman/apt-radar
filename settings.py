@@ -24,26 +24,44 @@ SETTINGS_PATH = Path(__file__).parent / "settings.json"
 
 # Baked-in defaults — used the first time the app runs (before settings.json
 # exists) and as fallbacks for any field missing from a partial settings file.
-# These are example values — users override them via the Settings page.
-# The Facebook groups list is pre-seeded with Tel Aviv apartment groups, useful
-# as a starting point for Israeli users (anyone else can replace them).
+# Pre-seeded with a working Tel Aviv example so a new user can run their first
+# scan immediately and see real results. Non-Israeli users replace via the UI.
 DEFAULTS: dict = {
-    "max_rent": 3000,
-    "min_rent": 1000,
-    "ideal_max_rent": 2500,
-    "min_rooms": 2,
-    "min_sqm": 50,
+    "min_rent": 10000,
+    "max_rent": 25000,
+    "ideal_max_rent": 22000,
+    "min_rooms": 4,
+    "min_sqm": 90,
     "min_bathrooms": 1,
     "sublet_ok": True,
     # Polygon stored as list of [lat, lng] pairs (NOT GeoJSON's lng/lat order).
-    # Empty = no geographic filter applied.
-    "polygon": [],
-    "yad2_search_urls": [],
+    # Default polygon covers Old North, Tel Aviv.
+    "polygon": [
+        [32.09715897403471, 34.774227066605704],
+        [32.07821352992593, 34.76623989490943],
+        [32.07093149984006, 34.782194756654405],
+        [32.09589264951619, 34.78822633741433],
+    ],
+    "yad2_search_urls": [
+        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.081987%2C34.764798%2C32.096724%2C34.787711",
+        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.071149%2C34.761555%2C32.085888%2C34.784468",
+    ],
     # Empty by default — Facebook scraping is opt-in (requires Chrome debug setup).
-    # The settings.json.example file ships with example FB groups for Tel Aviv users
-    # who want to enable the FB path.
+    # See STARTER_FACEBOOK_GROUPS below for a curated set the user can add.
     "facebook_groups": [],
 }
+
+
+# Starter Facebook groups offered to users who enable the Facebook path.
+# Displayed in the settings UI as a separate "available groups" panel — the
+# user opts in by clicking a button to copy them into the active list.
+STARTER_FACEBOOK_GROUPS: list[str] = [
+    "https://www.facebook.com/groups/1673941052823845/",
+    "https://www.facebook.com/groups/785935868134249/",
+    "https://www.facebook.com/groups/458499457501175/",
+    "https://www.facebook.com/groups/188430365379/",
+    "https://www.facebook.com/groups/TelAvivApartments/",
+]
 
 
 def load_settings() -> dict:
@@ -96,6 +114,35 @@ def update_yad2_urls(urls: list[str], min_price: int, max_price: int, min_rooms:
     return [update_yad2_url(u, min_price, max_price, min_rooms) for u in urls]
 
 
+def polygon_bbox(polygon: list[list[float]]) -> tuple[float, float, float, float]:
+    """Compute the axis-aligned bounding box of a [lat, lng] polygon.
+    Returns (min_lat, min_lng, max_lat, max_lng). Raises if empty."""
+    if not polygon:
+        raise ValueError("Cannot compute bbox of empty polygon")
+    lats = [p[0] for p in polygon]
+    lngs = [p[1] for p in polygon]
+    return min(lats), min(lngs), max(lats), max(lngs)
+
+
+def yad2_url_from_polygon(
+    polygon: list[list[float]],
+    min_price: int,
+    max_price: int,
+    min_rooms: float,
+) -> str:
+    """Auto-generate a Yad2 rental search URL from a polygon's bounding box.
+    The polygon also acts as a post-scrape filter, so the resulting URL
+    may return some listings that get rejected by the polygon check."""
+    min_lat, min_lng, max_lat, max_lng = polygon_bbox(polygon)
+    bbox_raw = f"{min_lat},{min_lng},{max_lat},{max_lng}"
+    bbox_enc = urlencode({"bBox": bbox_raw})  # produces bBox=lat1%2Clng1%2Clat2%2Clng2
+    rooms_str = str(int(min_rooms)) if float(min_rooms).is_integer() else str(float(min_rooms))
+    return (
+        f"https://www.yad2.co.il/realestate/rent?"
+        f"minPrice={int(min_price)}&maxPrice={int(max_price)}&minRooms={rooms_str}&{bbox_enc}"
+    )
+
+
 # --- Facebook group URL parsing ---
 
 
@@ -108,6 +155,8 @@ def parse_facebook_groups(text: str) -> list[str]:
     Parse a textarea of Facebook group URLs (one per line). Lines starting
     with `#` and blank lines are ignored. Each URL must look like a
     facebook.com/groups/... link. Trailing slashes are normalized.
+
+    Empty input returns an empty list — Facebook scraping is opt-in.
     """
     urls: list[str] = []
     for raw_line in (text or "").splitlines():
@@ -130,8 +179,6 @@ def parse_facebook_groups(text: str) -> list[str]:
         if not normalized.endswith("/"):
             normalized += "/"
         urls.append(normalized)
-    if not urls:
-        raise FacebookURLError("At least one Facebook group URL is required")
     # Dedup while preserving order
     seen: set[str] = set()
     unique: list[str] = []

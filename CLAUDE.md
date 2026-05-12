@@ -104,7 +104,9 @@ Wait for them to confirm they've saved.
 
 ### Step 7 — Test scan
 
-"Click 'Run Scan Now' in the dashboard. Takes 1-2 min Yad2-only, 5-7 min with Facebook."
+If they kept the "Run a scan after saving" checkbox in Step 6, the scan is already running — they're on the Pending tab with a "Scanning..." indicator.
+
+If they unchecked it, ask them to click "Run Scan Now" in the dashboard. Takes 1-2 min Yad2-only, 5-7 min with Facebook.
 
 Facebook path: warn that Chrome will briefly come to the foreground multiple times during the scan. Expected.
 
@@ -144,6 +146,12 @@ Tell them:
 - Logs: `monitor.log`
 
 ---
+
+## Yad2 notes
+
+- **Login first** — Yad2 throttles anonymous traffic and may serve captchas. If a user reports empty scrapes on Yad2-only path, the fix is to log into Yad2 in their regular Chrome (cookies persist; the scraper sees them).
+- **Polygon → bBox URL** — if the user has a polygon but no Yad2 URLs, the settings save handler auto-generates one Yad2 URL with the polygon's bBox. They can override by pasting their own URLs.
+- **URL param rewriting** — `update_yad2_urls()` rewrites `minPrice`, `maxPrice`, `minRooms` on existing URLs while preserving `bBox`/`neighborhood`/`city`/`area`. So changing criteria in the UI keeps the user's chosen geographic search intact.
 
 ## Architecture (for ongoing development)
 

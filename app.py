@@ -9,10 +9,11 @@ import os
 import subprocess
 from pathlib import Path
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 
 from db import get_listings, update_listing_status
 from settings import (
+    STARTER_FACEBOOK_GROUPS,
     FacebookURLError,
     GeoJSONError,
     load_settings,
@@ -20,6 +21,7 @@ from settings import (
     parse_geojson_polygon,
     save_settings,
     update_yad2_urls,
+    yad2_url_from_polygon,
 )
 
 app = Flask(__name__)
@@ -178,13 +180,23 @@ def settings_page():
             if geojson_text:
                 polygon = parse_geojson_polygon(geojson_text)
 
-            # Facebook groups: parsed from textarea (one URL per line)
+            # Facebook groups: parsed from textarea (one URL per line). Empty = no FB scraping.
             fb_groups = parse_facebook_groups(form.get("facebook_groups") or "")
 
-            # Regenerate Yad2 URLs with the new price/rooms params
-            new_urls = update_yad2_urls(
-                current["yad2_search_urls"], min_rent, max_rent, min_rooms
-            )
+            # Yad2 URLs: prefer what the user pasted into the textarea (one per line).
+            # Falls back to the existing stored list. If the result is empty AND we
+            # have a polygon, auto-generate a URL from the polygon's bounding box.
+            yad2_raw = (form.get("yad2_search_urls") or "").strip()
+            if yad2_raw:
+                new_urls = [
+                    line.strip() for line in yad2_raw.splitlines()
+                    if line.strip() and not line.strip().startswith("#")
+                ]
+            else:
+                new_urls = list(current["yad2_search_urls"])
+            new_urls = update_yad2_urls(new_urls, min_rent, max_rent, min_rooms)
+            if not new_urls and polygon:
+                new_urls = [yad2_url_from_polygon(polygon, min_rent, max_rent, min_rooms)]
 
             save_settings({
                 "min_rent": min_rent,
@@ -198,7 +210,22 @@ def settings_page():
                 "yad2_search_urls": new_urls,
                 "facebook_groups": fb_groups,
             })
-            success = "Settings saved. The next scheduled scan will use the new values."
+
+            # Optional: trigger a scan immediately after save (default behavior).
+            if form.get("run_after_save") == "on" and not _scan_pid():
+                env = {**os.environ, "TLV_APT_FORCE": "1", "TLV_APT_FOREGROUND": "1"}
+                proc = subprocess.Popen(
+                    [str(SCRIPT_DIR / "run_monitor.sh")],
+                    cwd=str(SCRIPT_DIR),
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                SCAN_PID_FILE.write_text(str(proc.pid))
+                return redirect("/")
+
+            success = "Settings saved."
         except (KeyError, ValueError, GeoJSONError, FacebookURLError) as e:
             error = str(e)
 
@@ -209,6 +236,7 @@ def settings_page():
         settings=s,
         polygon_geojson=_polygon_to_geojson(s["polygon"]),
         yad2_urls=s["yad2_search_urls"],
+        starter_facebook_groups=STARTER_FACEBOOK_GROUPS,
         error=error,
         success=success,
     )

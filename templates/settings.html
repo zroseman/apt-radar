@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — TLV Apt Monitor</title>
+<title>Settings — Apt Radar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -224,12 +224,104 @@
     font-weight: 500;
   }
   a.external:hover { text-decoration: underline; }
+
+  .steps {
+    margin: 0.5rem 0 1rem 0;
+    padding-left: 1.4rem;
+  }
+  .steps li {
+    font-size: 0.82rem;
+    color: #455a64;
+    margin-bottom: 0.35rem;
+    line-height: 1.55;
+  }
+
+  .starter-panel {
+    background: #f5f7fa;
+    border: 1px dashed #b0bec5;
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    margin-top: 0.75rem;
+  }
+  .starter-panel .panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #455a64;
+    margin-bottom: 0.4rem;
+  }
+  .starter-panel .panel-list {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    color: #546e7a;
+    line-height: 1.6;
+    word-break: break-all;
+    margin-bottom: 0.6rem;
+  }
+  .btn-secondary {
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #bbdefb;
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .btn-secondary:hover { background: #bbdefb; }
+
+  details.fb-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 0;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  details.fb-section > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 1.2rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  details.fb-section > summary::-webkit-details-marker { display: none; }
+  details.fb-section > summary .fb-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  details.fb-section > summary .fb-sub {
+    font-size: 0.75rem;
+    color: #78909c;
+    margin-top: 0.15rem;
+  }
+  details.fb-section > summary .fb-toggle {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #1565c0;
+    white-space: nowrap;
+  }
+  details.fb-section[open] > summary .fb-toggle::before { content: "Hide"; }
+  details.fb-section:not([open]) > summary .fb-toggle::before { content: "Set up Facebook ›"; }
+  details.fb-section > .fb-body {
+    padding: 0 1.25rem 1.2rem 1.25rem;
+    border-top: 1px solid #eceff1;
+  }
+  details.fb-section > .fb-body > .help { padding-top: 1rem; }
+
+  .checkbox-row.run-after-save {
+    margin-right: auto;
+  }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>TLV Apartment Monitor</h1>
+  <h1>Apt Radar</h1>
 </div>
 
 <div class="tabs">
@@ -287,9 +379,10 @@
 
       <div class="field-row">
         <div class="field">
-          <label for="min_rooms">Minimum rooms</label>
+          <label for="min_rooms">Minimum rooms <span style="font-weight:400;color:#78909c;">(Israeli style: bedrooms + 1 for living room)</span></label>
           <input type="number" id="min_rooms" name="min_rooms" min="0.5" step="0.5"
                  value="{{ settings.min_rooms }}" required>
+          <div class="hint">e.g. 4 rooms = 3 bedrooms + 1 living room.</div>
         </div>
         <div class="field">
           <label for="min_sqm">Minimum sqm</label>
@@ -318,13 +411,20 @@
     <div class="section">
       <h2>Geographic area</h2>
       <p class="help">
-        Listings whose coordinates fall outside this polygon are excluded.
-        To redraw the area, open
-        <a href="https://geojson.io" target="_blank" rel="noopener" class="external">geojson.io ↗</a>,
-        click the polygon tool (pentagon icon, top-right), draw your area, then copy
-        the entire JSON from the right panel and paste it below. <strong>Leave blank to keep
-        the existing polygon.</strong>
+        The polygon filters listings <strong>after</strong> they're scraped — only listings whose
+        coordinates fall inside are kept. If you also leave the Yad2 search URLs blank below,
+        a Yad2 URL gets auto-generated from this polygon's bounding box.
       </p>
+
+      <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">How to set or change the area:</p>
+      <ol class="steps">
+        <li>Open <a href="https://geojson.io" target="_blank" rel="noopener" class="external">geojson.io ↗</a> in a new tab.</li>
+        <li>Pan/zoom the map to your area.</li>
+        <li>Click the polygon tool (pentagon icon, top-right of the map).</li>
+        <li>Click points on the map to draw your area; double-click the last point to close it.</li>
+        <li>The right panel shows the full GeoJSON. Copy <strong>all of it</strong>.</li>
+        <li>Paste into the "New polygon" field below.</li>
+      </ol>
 
       <div class="field">
         <label for="geojson_current">Current polygon (read-only — for reference)</label>
@@ -334,45 +434,108 @@
       <div class="field">
         <label for="geojson">New polygon (paste GeoJSON to replace)</label>
         <textarea id="geojson" name="geojson"
-                  placeholder='Paste a GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
+                  placeholder='Paste the GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
         <div class="hint">Must be a valid Polygon inside Israel.</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Facebook groups</h2>
-      <p class="help">
-        One URL per line. Each must be a Facebook group link (contains <code>/groups/</code>).
-        Lines starting with <code>#</code> are ignored. Add or remove groups by editing the list below.
-      </p>
-      <div class="field">
-        <label for="facebook_groups">Group URLs</label>
-        <textarea id="facebook_groups" name="facebook_groups" required>{% for url in settings.facebook_groups %}{{ url }}
-{% endfor %}</textarea>
-        <div class="hint">{{ settings.facebook_groups|length }} group{{ 's' if settings.facebook_groups|length != 1 }} configured.</div>
       </div>
     </div>
 
     <div class="section">
       <h2>Yad2 search URLs</h2>
       <p class="help">
-        These get rebuilt automatically from your price/rooms criteria when you save —
-        the bBox stays the same. They're shown here for reference.
+        One Yad2 search URL per line. These tell Apt Radar <em>what to fetch from Yad2</em>.
+        <strong>Leave blank to auto-generate one from your geographic polygon above.</strong>
+        Price and rooms params get rewritten from your criteria when you save.
       </p>
-      <div class="url-list">
-        {% for url in yad2_urls %}
-          <div class="url"><a href="{{ url }}" target="_blank" rel="noopener" class="external">{{ url }}</a></div>
-        {% endfor %}
+      <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">How to get a Yad2 URL:</p>
+      <ol class="steps">
+        <li>Open <a href="https://www.yad2.co.il/realestate/rent" target="_blank" rel="noopener" class="external">yad2.co.il/realestate/rent ↗</a></li>
+        <li>Tip: log in first — Yad2 throttles anonymous traffic and may show a captcha.</li>
+        <li>Set your filters (area, price, rooms) and run the search.</li>
+        <li>Copy the URL from your browser's address bar.</li>
+        <li>Paste it below. Add more (one per line) if you want multiple search areas.</li>
+      </ol>
+      <div class="field">
+        <label for="yad2_search_urls">Yad2 URLs</label>
+        <textarea id="yad2_search_urls" name="yad2_search_urls"
+                  placeholder="Paste one or more Yad2 search URLs (one per line). Leave blank to auto-generate from your polygon.">{% for url in yad2_urls %}{{ url }}
+{% endfor %}</textarea>
+        <div class="hint">{{ yad2_urls|length }} URL{{ 's' if yad2_urls|length != 1 }} configured.</div>
       </div>
     </div>
 
+    <details class="fb-section" {% if settings.facebook_groups %}open{% endif %}>
+      <summary>
+        <div>
+          <div class="fb-title">Facebook groups <span style="font-weight:400;color:#78909c;">(optional)</span></div>
+          <div class="fb-sub">
+            {% if settings.facebook_groups %}
+              {{ settings.facebook_groups|length }} active group{{ 's' if settings.facebook_groups|length != 1 }}.
+            {% else %}
+              Not configured. Adds ~10% more listings — takes ~10 minutes to set up.
+            {% endif %}
+          </div>
+        </div>
+        <span class="fb-toggle"></span>
+      </summary>
+
+      <div class="fb-body">
+        <p class="help">
+          Facebook scraping requires a separate Chrome instance running with remote debugging.
+          Once set up, Apt Radar can read posts from any group your Facebook account belongs to.
+        </p>
+        <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">One-time setup:</p>
+        <ol class="steps">
+          <li>Quit Chrome completely (Cmd+Q — not just closing the window).</li>
+          <li>From your terminal, in this project's folder, run: <code>./start_chrome_debug.sh</code></li>
+          <li>A new Chrome window opens to facebook.com. Log in.</li>
+          <li>Leave that Chrome running whenever you want Apt Radar to scrape Facebook.</li>
+        </ol>
+
+        <div class="field">
+          <label for="facebook_groups">Active group URLs (one per line) — leave blank to skip Facebook</label>
+          <textarea id="facebook_groups" name="facebook_groups"
+                    placeholder="Paste Facebook group URLs (one per line). Lines starting with # are ignored.">{% for url in settings.facebook_groups %}{{ url }}
+{% endfor %}</textarea>
+          <div class="hint">{{ settings.facebook_groups|length }} active group{{ 's' if settings.facebook_groups|length != 1 }}.</div>
+        </div>
+
+        {% if starter_facebook_groups %}
+          <div class="starter-panel">
+            <div class="panel-title">Starter list — Tel Aviv apartment groups</div>
+            <div class="panel-list">{% for url in starter_facebook_groups %}{{ url }}<br>{% endfor %}</div>
+            <button type="button" class="btn-secondary" onclick="copyStarterGroups()">Copy starter list into active</button>
+          </div>
+        {% endif %}
+      </div>
+    </details>
+
     <div class="submit-row">
+      <div class="checkbox-row run-after-save">
+        <input type="checkbox" id="run_after_save" name="run_after_save" checked>
+        <label for="run_after_save">Run a scan after saving</label>
+      </div>
       <button type="submit" class="btn-primary">Save settings</button>
     </div>
 
   </form>
 
 </div>
+
+<script>
+const STARTER_FB_GROUPS = [{% for url in starter_facebook_groups %}{{ url|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+function copyStarterGroups() {
+  const ta = document.getElementById('facebook_groups');
+  const existing = new Set(
+    ta.value.split('\n').map(s => s.trim()).filter(Boolean)
+  );
+  const merged = ta.value.trim().split('\n').filter(s => s.trim());
+  for (const g of STARTER_FB_GROUPS) {
+    if (!existing.has(g)) merged.push(g);
+  }
+  ta.value = merged.join('\n');
+  ta.focus();
+}
+</script>
 
 </body>
 </html>
