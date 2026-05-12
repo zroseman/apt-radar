@@ -87,18 +87,14 @@ Run `./run_dashboard.sh &`. Verify `curl -s http://127.0.0.1:5055/` returns 200.
 
 ### Step 6 — Configure search criteria (in the web UI)
 
-Tell the user: "I just opened the Settings page in your browser. Fill in:
-- Price range (monthly rent in ₪)
-- Min rooms, min sqm, min bathrooms
-- Yad2 search URLs (instructions below)
-- Geographic polygon (optional, skip unless you want neighborhood filtering)"
+Tell the user: "Open the Settings tab and fill in your criteria. The form already ships with a working Tel Aviv example — just adjust whatever's wrong for you. The page has on-screen instructions for each section."
 
-For Yad2 URLs:
-1. Direct them to https://www.yad2.co.il/realestate/rent
-2. Have them set their filters and click search
-3. Copy the URL from the address bar, paste into the Yad2 URLs field (one per line; multiple search areas OK)
+Default behavior worth flagging:
+- **Geographic polygon** — drives the post-scrape filter. If they leave Yad2 URLs blank, Apt Radar auto-generates one from the polygon's bounding box.
+- **Yad2 URLs** — paste your own if you want a specific search (logging into Yad2 first is recommended; Yad2 throttles anonymous traffic and may serve captchas).
+- **Facebook section** — hidden behind a "Set up Facebook" disclosure. The user expands it only if they chose the Facebook path. Inside is a starter list of 5 Tel Aviv apartment groups with a "Copy to active" button.
 
-Facebook path: the settings page is pre-seeded with 5 Tel Aviv apartment groups — they can keep, edit, or replace. Have them click Save when done.
+The save button has a **"Run a scan after saving"** checkbox that's checked by default — saving will kick off the first scan and redirect to the Pending tab. They don't need to come back to you to trigger it.
 
 Wait for them to confirm they've saved.
 
