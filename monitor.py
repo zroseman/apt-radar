@@ -100,6 +100,22 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
     bootstrap=True: mark every scraped post as seen and skip notifications.
     Used once on initial deployment to clear out the existing backlog.
     """
+    if not FACEBOOK_GROUPS:
+        logger.info("No Facebook groups configured — skipping FB scan.")
+        return
+
+    # Auto-skip if Chrome debug isn't reachable. Avoids noisy exceptions when
+    # the user is on the Yad2-only path or hasn't started the debug Chrome.
+    import urllib.request
+    try:
+        urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2).read()
+    except Exception:
+        logger.info(
+            "Chrome debug port 9222 not reachable — skipping FB scan. "
+            "Run ./start_chrome_debug.sh to enable Facebook scraping."
+        )
+        return
+
     logger.info("Scraping %d Facebook groups...", len(FACEBOOK_GROUPS))
     all_posts = scrape_all_groups(FACEBOOK_GROUPS)
     logger.info("Total posts scraped: %d", len(all_posts))

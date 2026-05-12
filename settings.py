@@ -39,13 +39,10 @@ DEFAULTS: dict = {
     # Empty = no geographic filter applied.
     "polygon": [],
     "yad2_search_urls": [],
-    "facebook_groups": [
-        "https://www.facebook.com/groups/1673941052823845/",
-        "https://www.facebook.com/groups/785935868134249/",
-        "https://www.facebook.com/groups/458499457501175/",
-        "https://www.facebook.com/groups/188430365379/",
-        "https://www.facebook.com/groups/TelAvivApartments/",
-    ],
+    # Empty by default — Facebook scraping is opt-in (requires Chrome debug setup).
+    # The settings.json.example file ships with example FB groups for Tel Aviv users
+    # who want to enable the FB path.
+    "facebook_groups": [],
 }
 
 

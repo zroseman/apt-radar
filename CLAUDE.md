@@ -12,7 +12,15 @@ The wizard is **hybrid**:
 
 When the user needs to do something in the web UI, open it for them and tell them exactly which fields to fill in. Wait for them to confirm before moving on.
 
-**Secrets handling**: When you need an API key or webhook URL, the user pastes it into chat. **You write it to `.env`** — never make them open a text editor.
+**Secrets handling**: When you need an API key or webhook URL, the user pastes it into chat. **Write it to `.env` via the helper script — not via the Write tool**, which is blocked from editing `.env` files:
+
+```bash
+./scripts/configure_env.sh ANTHROPIC_API_KEY=<the-key-they-pasted>
+```
+
+The helper handles file creation, in-place updates, and preserves other keys. Pass one or more `KEY=value` args per call.
+
+**Ask, don't infer.** When the wizard's first step asks the user to pick a path (Yad2-only vs Yad2+Facebook), wait for their explicit answer even if they've given you context that implies a choice. Same for the optional steps at the end (Slack, auto-launch). Always explicit, always wait.
 
 ## Audience
 
@@ -20,9 +28,9 @@ macOS users with Claude Code. Linux/Windows works for Yad2-only; the Facebook pa
 
 ## Setup wizard
 
-### Step 0 — Pick a path
+### Step 0 — Pick a path (always ask, never infer)
 
-Greet and present the choice:
+Greet and present the choice. **Wait for an explicit answer** — even if the user said something earlier that hints at a preference, ask again here.
 
 > **Recommended: Yad2 only** ⭐
 > 5 minutes. Catches ~90% of relevant listings. No browser configuration.
@@ -44,13 +52,21 @@ Run `bash setup.sh`. Verify `.venv/bin/python3` exists.
 
 ### Step 3 — Anthropic API key
 
-Tell the user: "Apt Radar uses Claude to parse listing text. I need your Anthropic API key. If you don't have one, get it at https://console.anthropic.com/settings/keys (free tier is fine). Paste it here."
+Tell the user: "Apt Radar uses Claude to parse listing text. I need your Anthropic API key. If you don't have one, get it at https://console.anthropic.com/settings/keys. Paste it here."
 
-When they paste, **write it to `.env`** yourself:
+(If they ask whether they can use OpenAI or another LLM: no, not without code changes — the listing parser is hardcoded to the Anthropic SDK. They'd need to modify `post_parser.py` to switch.)
+
+When they paste, write to `.env` **via the helper script** (the Write tool is blocked from editing `.env` files):
+
+```bash
+./scripts/configure_env.sh ANTHROPIC_API_KEY=<their-key>
 ```
-ANTHROPIC_API_KEY=<their-key>
+
+If they want a different port too (e.g., 5056 because something else is on 5055), include it:
+
+```bash
+./scripts/configure_env.sh ANTHROPIC_API_KEY=<key> APT_RADAR_PORT=5056
 ```
-Create `.env` if it doesn't exist; preserve any other vars if it does.
 
 ### Step 4 — (Facebook path only) Launch debug Chrome
 
@@ -102,9 +118,9 @@ If yes:
 1. https://api.slack.com/apps → Create New App → From scratch
 2. Enable Incoming Webhooks → Add New Webhook → pick a channel (DM yourself works fine)
 3. Have them paste the webhook URL into chat
-4. **You write it to `.env`**:
-   ```
-   APT_RADAR_SLACK_WEBHOOK=<their-url>
+4. Write to `.env` via the helper:
+   ```bash
+   ./scripts/configure_env.sh APT_RADAR_SLACK_WEBHOOK=<their-url>
    ```
 
 If no, skip. They'll check the dashboard.
