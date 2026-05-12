@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLV Apt Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    line-height: 1.5;
+    padding-bottom: 2rem;
+  }
+
+  .header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 1rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .header h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .scan-status {
+    font-size: 0.75rem;
+    color: #8892b0;
+    white-space: nowrap;
+  }
+
+  .scan-status.running {
+    color: #64ffda;
+  }
+
+  .scan-btn {
+    background: #64ffda;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+  }
+
+  .scan-btn:hover:not(:disabled) { background: #4fd1b8; }
+  .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    background: #16213e;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+    margin: 0 auto;
+    max-width: 640px;
+  }
+
+  .tabs a {
+    flex: 1;
+    text-align: center;
+    padding: 0.7rem 0.5rem;
+    color: #8892b0;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+  }
+
+  .tabs a:hover { color: #ccd6f6; }
+
+  .tabs a.active {
+    color: #64ffda;
+    border-bottom-color: #64ffda;
+    background: rgba(100, 255, 218, 0.05);
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 1rem auto;
+    padding: 0 0.75rem;
+  }
+
+  .count-badge {
+    font-size: 0.85rem;
+    color: #8892b0;
+    margin-bottom: 0.75rem;
+    padding: 0 0.25rem;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #8892b0;
+    font-size: 1rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    transition: transform 0.15s, opacity 0.3s;
+  }
+
+  .card.hiding {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
+  }
+
+  .price {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+
+  .badge-row {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-rooms { background: #e8f4fd; color: #1565c0; }
+  .badge-sqm   { background: #f3e8fd; color: #7b1fa2; }
+  .badge-bath  { background: #e8fdf0; color: #2e7d32; }
+  .badge-mamad { background: #fff3e0; color: #e65100; }
+  .badge-parking { background: #e0f7fa; color: #00695c; }
+  .badge-sublet  { background: #fce4ec; color: #c62828; }
+
+  .location {
+    font-size: 0.85rem;
+    color: #546e7a;
+    margin-bottom: 0.4rem;
+  }
+
+  .summary {
+    font-size: 0.88rem;
+    color: #37474f;
+    margin-bottom: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .highlights {
+    margin-bottom: 0.6rem;
+  }
+
+  .highlights li {
+    font-size: 0.8rem;
+    color: #546e7a;
+    margin-bottom: 0.15rem;
+    list-style: none;
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .highlights li::before {
+    content: "\2022";
+    position: absolute;
+    left: 0;
+    color: #64ffda;
+    font-weight: bold;
+  }
+
+  .raw-toggle {
+    background: none;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+    color: #78909c;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    transition: background 0.15s;
+  }
+
+  .raw-toggle:hover { background: #f5f5f5; }
+
+  .raw-text {
+    display: none;
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.78rem;
+    color: #455a64;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 0.6rem;
+    direction: auto;
+    line-height: 1.55;
+  }
+
+  .raw-text.show { display: block; }
+
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 0.55rem 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn-save {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .btn-save:hover { background: #c8e6c9; }
+
+  .btn-reject {
+    background: #ffebee;
+    color: #c62828;
+  }
+  .btn-reject:hover { background: #ffcdd2; }
+
+  .btn-undo {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+  .btn-undo:hover { background: #bbdefb; }
+
+  .btn-link {
+    background: #f5f5f5;
+    color: #1565c0;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-link:hover { background: #e0e0e0; }
+
+  .card-meta {
+    font-size: 0.7rem;
+    color: #b0bec5;
+    margin-top: 0.4rem;
+  }
+
+  /* Rejected view: compact cards */
+  .card.compact .summary,
+  .card.compact .highlights,
+  .card.compact .raw-toggle { display: none; }
+  .card.compact { padding: 0.75rem 1rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TLV Apartment Monitor</h1>
+  <div class="scan-controls">
+    <span class="scan-status" id="scanStatus" title="Briefly foregrounds Chrome ~5 times over ~5 min"></span>
+    <button class="scan-btn" id="scanBtn" onclick="startScan()" title="Briefly foregrounds Chrome ~5 times over ~5 min">Run Scan Now</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <a href="/" class="{{ 'active' if current_tab == 'pending' }}">Pending</a>
+  <a href="/saved" class="{{ 'active' if current_tab == 'saved' }}">Saved</a>
+  <a href="/rejected" class="{{ 'active' if current_tab == 'rejected' }}">Rejected</a>
+  <a href="/settings" class="{{ 'active' if current_tab == 'settings' }}">Settings</a>
+</div>
+
+<div class="container">
+  <div class="count-badge">{{ listings|length }} listing{{ 's' if listings|length != 1 }}</div>
+
+  {% if not listings %}
+    <div class="empty-state">
+      {% if current_tab == 'pending' %}
+        No new listings right now. Check back later.
+      {% elif current_tab == 'saved' %}
+        No saved listings yet.
+      {% else %}
+        No rejected listings.
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% for listing in listings %}
+  <div class="card {{ 'compact' if current_tab == 'rejected' }}" id="card-{{ listing.id }}" data-id="{{ listing.id }}">
+    <div class="card-header">
+      <span class="price">
+        {% if listing.price %}{{ "{:,}".format(listing.price) }} &#8362;/mo{% else %}Price unknown{% endif %}
+      </span>
+      <div class="badge-row">
+        {% if listing.rooms %}<span class="badge badge-rooms">{{ listing.rooms }} rooms</span>{% endif %}
+        {% if listing.sqm %}<span class="badge badge-sqm">{{ listing.sqm }}m&sup2;</span>{% endif %}
+        {% if listing.bathrooms %}<span class="badge badge-bath">{{ listing.bathrooms }} bath</span>{% endif %}
+        {% if listing.has_mamad %}<span class="badge badge-mamad">Mamad</span>{% endif %}
+        {% if listing.has_parking %}<span class="badge badge-parking">Parking</span>{% endif %}
+        {% if listing.is_sublet %}<span class="badge badge-sublet">Sublet</span>{% endif %}
+      </div>
+    </div>
+
+    {% if listing.location_name %}
+      <div class="location">&#x1F4CD; {{ listing.location_name }}</div>
+    {% endif %}
+
+    {% if listing.summary %}
+      <div class="summary">{{ listing.summary }}</div>
+    {% endif %}
+
+    {% if listing.highlights %}
+      <ul class="highlights">
+        {% for h in listing.highlights %}
+          <li>{{ h }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <button class="raw-toggle" onclick="toggleRaw({{ listing.id }})">Show original text</button>
+    <div class="raw-text" id="raw-{{ listing.id }}">{{ listing.raw_text }}</div>
+
+    <div class="actions">
+      {% if current_tab == 'pending' %}
+        <button class="btn btn-save" onclick="setStatus({{ listing.id }}, 'save')">Save</button>
+        <button class="btn btn-reject" onclick="setStatus({{ listing.id }}, 'reject')">Reject</button>
+      {% elif current_tab == 'saved' %}
+        <button class="btn btn-undo" onclick="setStatus({{ listing.id }}, 'pending')">Back to Pending</button>
+        <button class="btn btn-reject" onclick="setStatus({{ listing.id }}, 'reject')">Reject</button>
+      {% elif current_tab == 'rejected' %}
+        <button class="btn btn-undo" onclick="setStatus({{ listing.id }}, 'pending')">Undo</button>
+      {% endif %}
+      {% if listing.permalink %}
+        <a href="{{ listing.permalink }}" target="_blank" rel="noopener" class="btn btn-link">View Post</a>
+      {% endif %}
+    </div>
+
+    {% if listing.created_at %}
+      <div class="card-meta">Found {{ listing.created_at[:16].replace('T', ' ') }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+function toggleRaw(id) {
+  const el = document.getElementById('raw-' + id);
+  const btn = el.previousElementSibling;
+  el.classList.toggle('show');
+  btn.textContent = el.classList.contains('show') ? 'Hide original text' : 'Show original text';
+}
+
+// --- Manual scan trigger ---
+let scanStartedAt = null;
+let scanPollTimer = null;
+
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function setScanUI(running) {
+  const btn = document.getElementById('scanBtn');
+  const status = document.getElementById('scanStatus');
+  btn.disabled = running;
+  if (running) {
+    status.classList.add('running');
+    status.textContent = scanStartedAt
+      ? `Scanning… ${fmtElapsed(Date.now() - scanStartedAt)}`
+      : 'Scanning…';
+  } else {
+    status.classList.remove('running');
+    status.textContent = '';
+  }
+}
+
+function pollScanStatus() {
+  fetch('/api/scan/status')
+    .then(r => r.json())
+    .then(data => {
+      if (data.running) {
+        setScanUI(true);
+        scanPollTimer = setTimeout(pollScanStatus, 5000);
+      } else {
+        const wasRunning = scanStartedAt !== null;
+        scanStartedAt = null;
+        setScanUI(false);
+        if (wasRunning) {
+          // Scan just finished — reload to show any new listings
+          window.location.reload();
+        }
+      }
+    })
+    .catch(() => {
+      scanPollTimer = setTimeout(pollScanStatus, 5000);
+    });
+}
+
+function startScan() {
+  fetch('/api/scan/start', { method: 'POST' })
+    .then(r => r.json().then(d => ({ status: r.status, body: d })))
+    .then(({ status, body }) => {
+      if (body.ok) {
+        scanStartedAt = Date.now();
+        setScanUI(true);
+        if (scanPollTimer) clearTimeout(scanPollTimer);
+        scanPollTimer = setTimeout(pollScanStatus, 3000);
+      } else {
+        alert(body.error || 'Failed to start scan');
+      }
+    })
+    .catch(() => alert('Failed to start scan. Is the server reachable?'));
+}
+
+// On page load, check if a scan is already running (e.g., started in another tab)
+pollScanStatus();
+
+function setStatus(id, action) {
+  const card = document.getElementById('card-' + id);
+  card.classList.add('hiding');
+
+  fetch('/api/listings/' + id + '/' + action, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        setTimeout(() => card.remove(), 300);
+        // Update count
+        const remaining = document.querySelectorAll('.card:not(.hiding)').length - 1;
+        document.querySelector('.count-badge').textContent =
+          remaining + ' listing' + (remaining !== 1 ? 's' : '');
+        if (remaining <= 0) {
+          document.querySelector('.container').innerHTML +=
+            '<div class="empty-state">All done!</div>';
+        }
+      }
+    })
+    .catch(() => {
+      card.classList.remove('hiding');
+      alert('Failed to update. Check your connection.');
+    });
+}
+</script>
+
+</body>
+</html>

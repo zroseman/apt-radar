@@ -1,0 +1,26 @@
+# Secrets / local state
+.env
+settings.json
+.scan.pid
+
+# Database
+*.db
+seen_posts.db
+
+# Logs
+*.log
+monitor.log
+dashboard_stdout.log
+dashboard_stderr.log
+launchd_stdout.log
+launchd_stderr.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Per-user installation artifacts
+debug_chrome_profile/
+com.*.plist

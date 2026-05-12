@@ -1,0 +1,5 @@
+anthropic
+certifi
+flask
+requests
+websocket-client

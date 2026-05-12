@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — TLV Apt Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    line-height: 1.5;
+    padding-bottom: 3rem;
+  }
+
+  .header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 1rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .header h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    background: #16213e;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+    margin: 0 auto;
+    max-width: 640px;
+  }
+
+  .tabs a {
+    flex: 1;
+    text-align: center;
+    padding: 0.7rem 0.5rem;
+    color: #8892b0;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+  }
+
+  .tabs a:hover { color: #ccd6f6; }
+
+  .tabs a.active {
+    color: #64ffda;
+    border-bottom-color: #64ffda;
+    background: rgba(100, 255, 218, 0.05);
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 1rem auto;
+    padding: 0 0.75rem;
+  }
+
+  .banner {
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+  }
+  .banner.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left: 4px solid #2e7d32;
+  }
+  .banner.error {
+    background: #ffebee;
+    color: #c62828;
+    border-left: 4px solid #c62828;
+  }
+
+  .section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.2rem 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  .section h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.8rem;
+    color: #1a1a2e;
+  }
+
+  .section .help {
+    font-size: 0.78rem;
+    color: #78909c;
+    margin-bottom: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .field {
+    margin-bottom: 0.85rem;
+  }
+
+  .field:last-child { margin-bottom: 0; }
+
+  .field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #455a64;
+    margin-bottom: 0.3rem;
+  }
+
+  .field input[type="number"],
+  .field textarea {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #cfd8dc;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-family: inherit;
+    color: #1a1a2e;
+    background: #fafbfc;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .field input[type="number"]:focus,
+  .field textarea:focus {
+    outline: none;
+    border-color: #1565c0;
+    background: #fff;
+  }
+
+  .field textarea {
+    min-height: 180px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .field .hint {
+    font-size: 0.72rem;
+    color: #90a4ae;
+    margin-top: 0.25rem;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .checkbox-row label {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #1a1a2e;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .url-list {
+    background: #fafbfc;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    color: #455a64;
+    word-break: break-all;
+    line-height: 1.6;
+  }
+  .url-list .url + .url { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #e0e0e0; }
+
+  .submit-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+
+  .btn-primary {
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.7rem 1.4rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: #16213e; }
+  .btn-primary:active { transform: scale(0.98); }
+
+  a.external {
+    color: #1565c0;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  a.external:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TLV Apartment Monitor</h1>
+</div>
+
+<div class="tabs">
+  <a href="/">Pending</a>
+  <a href="/saved">Saved</a>
+  <a href="/rejected">Rejected</a>
+  <a href="/settings" class="active">Settings</a>
+</div>
+
+<div class="container">
+
+  {% if success %}
+    <div class="banner success">{{ success }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="banner error">⚠️ {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/settings">
+
+    <div class="section">
+      <h2>Price (₪/month)</h2>
+      <p class="help">
+        Listings outside the min/max range are rejected.
+        The "ideal max" is the highest price that still gets a "within ideal budget" badge —
+        anything above gets a "negotiate?" flag instead.
+      </p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="min_rent">Minimum rent</label>
+          <input type="number" id="min_rent" name="min_rent" min="0" step="500"
+                 value="{{ settings.min_rent }}" required>
+        </div>
+        <div class="field">
+          <label for="max_rent">Maximum rent</label>
+          <input type="number" id="max_rent" name="max_rent" min="0" step="500"
+                 value="{{ settings.max_rent }}" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="ideal_max_rent">Ideal maximum (negotiate above this)</label>
+        <input type="number" id="ideal_max_rent" name="ideal_max_rent" min="0" step="500"
+               value="{{ settings.ideal_max_rent }}" required>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Size requirements</h2>
+      <p class="help">
+        Hard filters — listings below these values are rejected.
+        Sqm and bathrooms are only checked if the listing actually mentions them
+        (so you don't lose posts that just don't include the field).
+      </p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="min_rooms">Minimum rooms</label>
+          <input type="number" id="min_rooms" name="min_rooms" min="0.5" step="0.5"
+                 value="{{ settings.min_rooms }}" required>
+        </div>
+        <div class="field">
+          <label for="min_sqm">Minimum sqm</label>
+          <input type="number" id="min_sqm" name="min_sqm" min="0" step="5"
+                 value="{{ settings.min_sqm }}" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="min_bathrooms">Minimum bathrooms</label>
+        <input type="number" id="min_bathrooms" name="min_bathrooms" min="0" step="0.5"
+               value="{{ settings.min_bathrooms }}" required>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Other</h2>
+      <div class="field">
+        <div class="checkbox-row">
+          <input type="checkbox" id="sublet_ok" name="sublet_ok"
+                 {% if settings.sublet_ok %}checked{% endif %}>
+          <label for="sublet_ok">Allow sublets (when lease is extendable)</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Geographic area</h2>
+      <p class="help">
+        Listings whose coordinates fall outside this polygon are excluded.
+        To redraw the area, open
+        <a href="https://geojson.io" target="_blank" rel="noopener" class="external">geojson.io ↗</a>,
+        click the polygon tool (pentagon icon, top-right), draw your area, then copy
+        the entire JSON from the right panel and paste it below. <strong>Leave blank to keep
+        the existing polygon.</strong>
+      </p>
+
+      <div class="field">
+        <label for="geojson_current">Current polygon (read-only — for reference)</label>
+        <textarea id="geojson_current" readonly>{{ polygon_geojson }}</textarea>
+      </div>
+
+      <div class="field">
+        <label for="geojson">New polygon (paste GeoJSON to replace)</label>
+        <textarea id="geojson" name="geojson"
+                  placeholder='Paste a GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
+        <div class="hint">Must be a valid Polygon inside Israel.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Facebook groups</h2>
+      <p class="help">
+        One URL per line. Each must be a Facebook group link (contains <code>/groups/</code>).
+        Lines starting with <code>#</code> are ignored. Add or remove groups by editing the list below.
+      </p>
+      <div class="field">
+        <label for="facebook_groups">Group URLs</label>
+        <textarea id="facebook_groups" name="facebook_groups" required>{% for url in settings.facebook_groups %}{{ url }}
+{% endfor %}</textarea>
+        <div class="hint">{{ settings.facebook_groups|length }} group{{ 's' if settings.facebook_groups|length != 1 }} configured.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Yad2 search URLs</h2>
+      <p class="help">
+        These get rebuilt automatically from your price/rooms criteria when you save —
+        the bBox stays the same. They're shown here for reference.
+      </p>
+      <div class="url-list">
+        {% for url in yad2_urls %}
+          <div class="url"><a href="{{ url }}" target="_blank" rel="noopener" class="external">{{ url }}</a></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="submit-row">
+      <button type="submit" class="btn-primary">Save settings</button>
+    </div>
+
+  </form>
+
+</div>
+
+</body>
+</html>
