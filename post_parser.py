@@ -124,15 +124,17 @@ def classify_post(text: str) -> dict | None:
     try:
         provider = _llm_provider()
         if provider == "anthropic":
+            model = os.environ.get("APT_RADAR_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
             response = _get_anthropic_client().messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model,
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = response.content[0].text.strip()
         else:  # openai
+            model = os.environ.get("APT_RADAR_OPENAI_MODEL", "gpt-4o-mini")
             response = _get_openai_client().chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},

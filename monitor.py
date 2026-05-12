@@ -15,6 +15,7 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from config import FACEBOOK_ENABLED, FACEBOOK_GROUPS, LOG_PATH, YAD2_SEARCH_URLS
 from chrome_scraper import scrape_all_groups
@@ -23,12 +24,13 @@ from yad2_scraper import scrape_yad2_searches, yad2_cards_to_listings
 from db import filter_new_posts, mark_posts_seen, mark_seen, get_stats, compute_fingerprint, is_fingerprint_rejected, save_listing
 from slack_notifier import send_listings, reset_alerts
 
-# Set up logging
+# Set up logging — rotate to keep monitor.log from growing unbounded.
+# 5MB per file, keep 3 rotations (15MB total ceiling).
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler(str(LOG_PATH)),
+        RotatingFileHandler(str(LOG_PATH), maxBytes=5 * 1024 * 1024, backupCount=3),
         logging.StreamHandler(sys.stdout),
     ],
 )
