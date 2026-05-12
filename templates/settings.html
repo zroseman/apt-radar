@@ -546,6 +546,69 @@ function copyStarterGroups() {
   ta.value = merged.join('\n');
   ta.focus();
 }
+
+// --- Polygon → Yad2 URL regeneration prompt ---
+// When the user pastes a polygon, ask whether to rebuild Yad2 search URLs from
+// its bounding box. Avoids the silent "manual paste beats auto-gen" trap.
+function extractPolygon(geojsonText) {
+  let data;
+  try { data = JSON.parse(geojsonText); } catch { return null; }
+  let geom = null;
+  if (data && data.type === 'FeatureCollection') {
+    for (const f of (data.features || [])) {
+      if (f && f.geometry && f.geometry.type === 'Polygon') { geom = f.geometry; break; }
+    }
+  } else if (data && data.type === 'Feature' && data.geometry && data.geometry.type === 'Polygon') {
+    geom = data.geometry;
+  } else if (data && data.type === 'Polygon') {
+    geom = data;
+  }
+  if (!geom) return null;
+  const ring = geom.coordinates && geom.coordinates[0];
+  if (!ring || ring.length < 3) return null;
+  return ring;  // array of [lng, lat] pairs
+}
+
+function buildYad2UrlFromRing(ring) {
+  // GeoJSON is [lng, lat]; we need [lat, lng] for the bBox string.
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const p of ring) {
+    const lng = p[0], lat = p[1];
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
+  const minRent = document.getElementById('min_rent').value || '0';
+  const maxRent = document.getElementById('max_rent').value || '0';
+  const minRooms = document.getElementById('min_rooms').value || '0';
+  const bbox = encodeURIComponent(`${minLat},${minLng},${maxLat},${maxLng}`);
+  return `https://www.yad2.co.il/realestate/rent?minPrice=${minRent}&maxPrice=${maxRent}&minRooms=${minRooms}&bBox=${bbox}`;
+}
+
+(function () {
+  const polygonTa = document.getElementById('geojson');
+  const yad2Ta = document.getElementById('yad2_search_urls');
+  if (!polygonTa || !yad2Ta) return;
+
+  polygonTa.addEventListener('paste', () => {
+    // Wait for the paste to actually land in the textarea, then offer to regenerate.
+    setTimeout(() => {
+      const text = polygonTa.value.trim();
+      if (!text) return;
+      const ring = extractPolygon(text);
+      if (!ring) return;  // invalid GeoJSON — will be caught on save
+      const newUrl = buildYad2UrlFromRing(ring);
+      const existing = yad2Ta.value.trim();
+      const msg = existing
+        ? 'You pasted a new geographic polygon.\n\nReplace your current Yad2 search URLs with one generated from this new area?\n\nOK = regenerate. Cancel = keep the existing URLs.'
+        : 'Generate a Yad2 search URL from this polygon?\n\nOK = add it to the Yad2 URLs field. Cancel = leave blank.';
+      if (confirm(msg)) {
+        yad2Ta.value = newUrl;
+      }
+    }, 50);
+  });
+})();
 </script>
 
 </body>
