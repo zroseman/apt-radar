@@ -102,7 +102,7 @@ def send_listing(listing: ApartmentListing) -> bool:
     if not SLACK_WEBHOOK_URL:
         logger.error(
             "SLACK_WEBHOOK_URL not configured. "
-            "Set the TLV_APT_SLACK_WEBHOOK environment variable."
+            "Set APT_RADAR_SLACK_WEBHOOK in your .env (or skip Slack — listings show in the dashboard)."
         )
         return False
 

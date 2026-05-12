@@ -29,10 +29,13 @@ fi
 mkdir -p "$PROFILE_DIR"
 
 echo "Launching debug Chrome (profile: $PROFILE_DIR)..."
+# Open to about:blank — the wizard navigates to Yad2 (and Facebook if enabled)
+# in dedicated tabs afterward. Yad2-only users shouldn't get a Facebook tab
+# they don't need.
 "$CHROME_APP" \
     --remote-debugging-port="$PORT" \
     --user-data-dir="$PROFILE_DIR" \
-    https://www.facebook.com/ &
+    about:blank &
 
 # Give Chrome a moment to bind the port
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -40,7 +43,6 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     if curl -s -m 2 "http://127.0.0.1:$PORT/json/version" > /dev/null 2>&1; then
         echo ""
         echo "Debug Chrome ready at http://127.0.0.1:$PORT"
-        echo "Log into Facebook in the new Chrome window if you haven't already."
         exit 0
     fi
 done

@@ -36,5 +36,8 @@ def point_in_polygon(lat: float, lng: float, polygon: list[tuple[float, float]])
 
 
 def is_in_target_area(lat: float, lng: float) -> bool:
-    """Convenience: check the configured INCLUSION_POLYGON."""
+    """Convenience: check the configured INCLUSION_POLYGON.
+    An empty polygon means 'no geographic filter, accept everywhere'."""
+    if not INCLUSION_POLYGON:
+        return True
     return point_in_polygon(lat, lng, INCLUSION_POLYGON)

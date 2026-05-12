@@ -83,7 +83,7 @@ Wait for their OK, then:
 ./start_chrome_debug.sh
 ```
 
-The script launches a new Chrome with `--remote-debugging-port=9222 --user-data-dir=./debug_chrome_profile` and waits for the port to bind. It opens to facebook.com by default — that's fine even for Yad2-only users, we navigate the tab in the next step.
+The script launches a new Chrome with `--remote-debugging-port=9222 --user-data-dir=./debug_chrome_profile` and waits for the port to bind. It opens to `about:blank` — we navigate to specific sites in the next steps.
 
 Verify CDP is reachable:
 
@@ -95,66 +95,66 @@ Should return JSON with a `Browser` field. If it doesn't, see "Chrome troublesho
 
 ### Step 5 — Log the user into Yad2 (both paths)
 
-Navigate the debug Chrome to Yad2 via CDP. You can use Python:
+Open Yad2's login page in the debug Chrome via the helper script:
 
 ```bash
-./.venv/bin/python3 << 'PYEOF'
-import json, requests
-from websocket import create_connection
-ws_url = requests.get("http://127.0.0.1:9222/json/version").json()["webSocketDebuggerUrl"]
-ws = create_connection(ws_url)
-ws.send(json.dumps({"id": 1, "method": "Target.createTarget", "params": {"url": "https://www.yad2.co.il/auth/login"}}))
-print(ws.recv())
-ws.close()
-PYEOF
+./scripts/open_in_debug_chrome.sh https://www.yad2.co.il/auth/login
 ```
+
+(The helper handles the CDP details and exits cleanly. If the script doesn't exist in this clone, fall back to the inline Python snippet in `scripts/open_in_debug_chrome.sh.template`.)
 
 Then tell the user: "I just opened Yad2's login page in the debug Chrome. Log in there. Tell me when you're done."
 
-Wait for their confirmation, then verify login. You can navigate a tab to yad2.co.il and read the page DOM, looking for the user's profile menu (a logged-in indicator) vs. the "Log in" / "התחבר" button (logged-out). Don't block the wizard on a perfect verification — if you can't tell, just trust them and move on.
+Wait for their confirmation. You can lightly verify by navigating to yad2.co.il and grepping the DOM for a logged-out indicator, but don't block on perfect verification — if you can't tell, trust the user and move on.
 
 ### Step 5b — Log the user into Facebook (Yad2+FB path only)
 
 Skip if Yad2-only.
 
-Same idea: navigate a debug Chrome tab to facebook.com via CDP, tell the user to log in, wait, verify (or trust).
-
-Then turn on the FB toggle in settings so the scanner uses Facebook on scans:
-
 ```bash
-./.venv/bin/python3 -c "from settings import save_settings; save_settings({'facebook_enabled': True})"
+./scripts/open_in_debug_chrome.sh https://www.facebook.com/
 ```
 
-This sets `facebook_enabled: True` in `settings.json`. The dashboard /settings page will show the FB section ON and pre-expanded.
+Tell them: "Facebook is open in the debug Chrome. Log in. Tell me when done."
 
-### Step 5 — Start the dashboard
+Wait for confirmation. Then enable Facebook scanning:
 
-Run `./run_dashboard.sh &`. Verify `curl -s http://127.0.0.1:5055/` returns 200. Run `open http://localhost:5055/settings`.
+```bash
+(cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && ./.venv/bin/python3 -c "from settings import save_settings; save_settings({'facebook_enabled': True})")
+```
 
-### Step 6 — Configure search criteria (in the web UI)
+(The `cd` ensures we're at the repo root so `from settings import` resolves.)
 
-Tell the user: "Open the Settings tab and fill in your criteria. The form already ships with a working Tel Aviv example — just adjust whatever's wrong for you. The page has on-screen instructions for each section."
+### Step 6 — Start the dashboard
+
+Run `./run_dashboard.sh &`. Verify `curl -s http://127.0.0.1:5055/` returns 200 (use the port from `.env` if they set `APT_RADAR_PORT`). Then `open http://localhost:5055/settings`.
+
+Ask the user: "Did the Settings page load in your browser?" Wait for confirmation — if Flask died after backgrounding (port in use, bad env, etc.), you'll catch it here rather than in Step 8.
+
+### Step 7 — Configure search criteria (in the web UI)
+
+Tell the user: "Fill in your criteria on the Settings page. The form has on-screen instructions for each section."
 
 Default behavior worth flagging:
-- **Geographic polygon** — drives the post-scrape filter. If they leave Yad2 URLs blank, Apt Radar auto-generates one from the polygon's bounding box.
-- **Yad2 URLs** — paste your own if you want a specific search (logging into Yad2 first is recommended; Yad2 throttles anonymous traffic and may serve captchas).
-- **Facebook section** — hidden behind a "Set up Facebook" disclosure. The user expands it only if they chose the Facebook path. Inside is a starter list of 5 Tel Aviv apartment groups with a "Copy to active" button.
+- **Geographic polygon** — drives the post-scrape filter. Empty polygon = no geographic filter (all Yad2/FB results are kept). If they paste a polygon AND leave Yad2 URLs blank, the app auto-generates a Yad2 URL from the polygon's bounding box.
+- **Yad2 URLs** — pre-filled with two Tel Aviv example URLs. Israeli friends can keep or refine; non-Israeli friends should replace with their own (instructions are in the section).
+- **Facebook section** — collapsed by default. Only expands if the user picked the Yad2+FB path. The starter list inside contains 5 Tel Aviv apartment groups they can copy to active.
 
-The save button has a **"Run a scan after saving"** checkbox that's checked by default — saving will kick off the first scan and redirect to the Pending tab. They don't need to come back to you to trigger it.
+The save button has a **"Run a scan after saving"** checkbox that's checked by default — saving will kick off the first scan and redirect to the Pending tab.
 
 Wait for them to confirm they've saved.
 
-### Step 7 — Test scan
+### Step 8 — Test scan
 
-If they kept the "Run a scan after saving" checkbox in Step 6, the scan is already running — they're on the Pending tab with a "Scanning..." indicator.
+If they kept the "Run a scan after saving" checkbox in Step 7, the scan is already running — they're on the Pending tab with a "Scanning..." indicator.
 
 If they unchecked it, ask them to click "Run Scan Now" in the dashboard. Takes 1-2 min Yad2-only, 5-7 min with Facebook.
 
-Facebook path: warn that Chrome will briefly come to the foreground multiple times during the scan. Expected.
+Both paths: warn that Chrome will briefly come to the foreground multiple times during the scan. Expected — that's how we read posts without hitting Yad2/FB anti-bot defenses.
 
-Wait for the button to re-enable. Tail `monitor.log`. If clean: "Test scan done. Any matches show up in the Pending tab."
+Wait for the button to re-enable. Tail `monitor.log`. If you see `"Chrome debug port 9222 not reachable"`, the debug Chrome died — restart it with `./start_chrome_debug.sh` and re-run the scan. If clean: "Test scan done. Matches show up in the Pending tab."
 
-### Step 8 — (Optional) Slack alerts
+### Step 9 — (Optional) Slack alerts
 
 Ask: "Want new listings to also DM you on Slack the moment they're found? Takes 2 min to set up."
 
@@ -169,18 +169,32 @@ If yes:
 
 If no, skip. They'll check the dashboard.
 
-### Step 9 — (Optional) Auto-launch + scheduled scans
+### Step 10 — (Optional) Dashboard auto-launch
 
-Ask: "Want the dashboard to auto-start every login, and a daily scheduled scan? I'll walk you through it. About 5 minutes."
+Ask: "Want the dashboard to auto-start every time you log into your Mac? Takes 10 seconds."
 
-If yes:
-1. Run `./install_launchd.sh` — installs the dashboard auto-launch (always-on).
-2. For the scheduled scan: ask what time they want it. **Important**: macOS laptops often miss scheduled times when the lid is closed. Recommend a time when the laptop is reliably awake (e.g., late morning) or warn about the lid-closed issue. If they want a daily 7-9am scan, suggest they keep the lid open overnight.
-3. Update the scheduled-scan plist with their chosen time and load it.
+If yes: run `./install_launchd.sh`. It installs a LaunchAgent that keeps the dashboard running.
 
-If no: skip. They use the dashboard button manually.
+If no: they'll start it manually each time with `./run_dashboard.sh &`.
 
-### Step 10 — Done
+### Step 11 — (Optional) Scheduled daily scan
+
+Ask: "Want a daily scan to run automatically at a specific time?"
+
+**Warn first**: macOS laptops in clamshell sleep (lid closed) often miss scheduled `launchd` times even with `pmset` wake. If they want overnight scans, they should keep the lid open. A late-morning time when the laptop is reliably awake is the most reliable choice.
+
+If yes: ask their preferred time, then run:
+
+```bash
+./install_scan_launchd.sh <HOUR> <MINUTE>
+# e.g. ./install_scan_launchd.sh 10 0  → daily at 10:00 local
+```
+
+If the install script doesn't exist in their clone, skip this step and tell them: "Scheduled scans haven't been wired up yet for this version — use the Run Scan Now button or ask me to set up a launchd schedule manually."
+
+If no: skip. They run scans on demand via the dashboard.
+
+### Step 12 — Done
 
 Tell them:
 - Dashboard: http://localhost:5055
@@ -215,8 +229,7 @@ Tell them:
 - `APT_RADAR_PORT` (optional; defaults to 5055)
 
 **Internal env vars (set by wrappers):**
-- `TLV_APT_FORCE=1` — bypass time-window guard
-- `TLV_APT_FOREGROUND=1` — open CDP tabs in foreground (needed for FB)
+- `TLV_APT_FOREGROUND=1` — open CDP tabs in foreground (needed for FB and reliable for Yad2)
 
 **LLM provider selection** (in `post_parser.py`):
 - `ANTHROPIC_API_KEY` set → Claude (`claude-haiku-4-5-20251001`, the tested model)
