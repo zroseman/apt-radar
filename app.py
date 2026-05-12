@@ -103,17 +103,24 @@ def _scan_pid():
 def api_scan_start():
     if _scan_pid():
         return jsonify({"ok": False, "error": "Scan already running"}), 409
-    env = {**os.environ, "TLV_APT_FORCE": "1", "TLV_APT_FOREGROUND": "1"}
-    proc = subprocess.Popen(
-        [str(SCRIPT_DIR / "run_monitor.sh")],
-        cwd=str(SCRIPT_DIR),
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    SCAN_PID_FILE.write_text(str(proc.pid))
-    return jsonify({"ok": True, "pid": proc.pid})
+    env = {**os.environ, "TLV_APT_FOREGROUND": "1"}
+    # Pre-claim the PID file so a parallel start request sees us as running
+    # before Popen returns. Race-tightening, not a true lock.
+    SCAN_PID_FILE.write_text("starting")
+    try:
+        proc = subprocess.Popen(
+            [str(SCRIPT_DIR / "run_monitor.sh")],
+            cwd=str(SCRIPT_DIR),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        SCAN_PID_FILE.write_text(str(proc.pid))
+        return jsonify({"ok": True, "pid": proc.pid})
+    except Exception as e:
+        SCAN_PID_FILE.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/scan/status")
@@ -127,25 +134,29 @@ def api_scan_status():
 
 def _polygon_to_geojson(polygon: list) -> str:
     """Render the stored polygon back into a GeoJSON FeatureCollection
-    so the user can edit it on geojson.io if they want."""
+    so the user can edit it on geojson.io if they want.
+    Returns '' for empty or malformed polygons rather than crashing the
+    settings page."""
     if not polygon:
         return ""
-    # Polygon is stored as [lat, lng]; GeoJSON wants [lng, lat]
-    ring = [[float(p[1]), float(p[0])] for p in polygon]
-    # Close the ring
-    if ring and ring[0] != ring[-1]:
-        ring.append(ring[0])
-    fc = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {},
-                "geometry": {"type": "Polygon", "coordinates": [ring]},
-            }
-        ],
-    }
-    return json.dumps(fc, indent=2)
+    try:
+        # Polygon is stored as [lat, lng]; GeoJSON wants [lng, lat]
+        ring = [[float(p[1]), float(p[0])] for p in polygon]
+        if ring and ring[0] != ring[-1]:
+            ring.append(ring[0])
+        fc = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": {"type": "Polygon", "coordinates": [ring]},
+                }
+            ],
+        }
+        return json.dumps(fc, indent=2)
+    except (TypeError, ValueError, IndexError):
+        return ""
 
 
 @app.route("/settings", methods=["GET", "POST"])
@@ -215,16 +226,21 @@ def settings_page():
 
             # Optional: trigger a scan immediately after save (default behavior).
             if form.get("run_after_save") == "on" and not _scan_pid():
-                env = {**os.environ, "TLV_APT_FORCE": "1", "TLV_APT_FOREGROUND": "1"}
-                proc = subprocess.Popen(
-                    [str(SCRIPT_DIR / "run_monitor.sh")],
-                    cwd=str(SCRIPT_DIR),
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-                SCAN_PID_FILE.write_text(str(proc.pid))
+                env = {**os.environ, "TLV_APT_FOREGROUND": "1"}
+                SCAN_PID_FILE.write_text("starting")
+                try:
+                    proc = subprocess.Popen(
+                        [str(SCRIPT_DIR / "run_monitor.sh")],
+                        cwd=str(SCRIPT_DIR),
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                    SCAN_PID_FILE.write_text(str(proc.pid))
+                except Exception:
+                    SCAN_PID_FILE.unlink(missing_ok=True)
+                    raise
                 return redirect("/")
 
             success = "Settings saved."
@@ -244,6 +260,32 @@ def settings_page():
     )
 
 
+def _parse_port(raw: str) -> int:
+    """Tolerate stray whitespace; fall back to 5055 on garbage input."""
+    try:
+        return int((raw or "").strip())
+    except (ValueError, TypeError):
+        return 5055
+
+
+@app.before_request
+def _block_cross_origin_state_changes():
+    """Reject state-mutating requests from foreign origins.
+    Local web pages can otherwise fetch() our endpoints (cookies/CORS not
+    required for state-mutating POSTs in the no-cors mode)."""
+    if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
+        return
+    origin = request.headers.get("Origin", "")
+    referer = request.headers.get("Referer", "")
+    same_origin_prefix = request.host_url.rstrip("/")
+    if origin and not origin.startswith(same_origin_prefix):
+        return ("Cross-origin requests rejected", 403)
+    if not origin and referer and not referer.startswith(same_origin_prefix):
+        return ("Cross-origin requests rejected", 403)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("APT_RADAR_PORT", "5055"))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    port = _parse_port(os.environ.get("APT_RADAR_PORT", "5055"))
+    # debug=False — Werkzeug's debugger is RCE; host=127.0.0.1 — keep off the LAN.
+    # Friends who want LAN access can change this manually and accept the risk.
+    app.run(debug=False, host="127.0.0.1", port=port)

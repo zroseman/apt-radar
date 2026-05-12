@@ -40,13 +40,10 @@ DEFAULTS: dict = {
     # facebook_groups is populated.
     "facebook_enabled": False,
     # Polygon stored as list of [lat, lng] pairs (NOT GeoJSON's lng/lat order).
-    # Default polygon covers Old North, Tel Aviv.
-    "polygon": [
-        [32.09715897403471, 34.774227066605704],
-        [32.07821352992593, 34.76623989490943],
-        [32.07093149984006, 34.782194756654405],
-        [32.09589264951619, 34.78822633741433],
-    ],
+    # Empty by default — geo_filter treats empty polygon as "no filter, accept
+    # all locations". Friends in non-Israeli cities don't accidentally drop
+    # every Yad2 result through a Tel Aviv-shaped filter.
+    "polygon": [],
     "yad2_search_urls": [
         "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.081987%2C34.764798%2C32.096724%2C34.787711",
         "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.071149%2C34.761555%2C32.085888%2C34.784468",
@@ -218,22 +215,31 @@ def parse_geojson_polygon(text: str) -> list[list[float]]:
         raise GeoJSONError(f"Not valid JSON: {e}") from e
 
     polygon_geom = None
+    polygon_count = 0
     typ = data.get("type")
     if typ == "FeatureCollection":
         for f in data.get("features", []):
             geom = f.get("geometry") or {}
             if geom.get("type") == "Polygon":
-                polygon_geom = geom
-                break
+                polygon_count += 1
+                if polygon_geom is None:
+                    polygon_geom = geom
     elif typ == "Feature":
         geom = data.get("geometry") or {}
         if geom.get("type") == "Polygon":
             polygon_geom = geom
+            polygon_count = 1
     elif typ == "Polygon":
         polygon_geom = data
+        polygon_count = 1
 
     if polygon_geom is None:
         raise GeoJSONError("Could not find a Polygon. Draw a polygon on geojson.io and copy the full output.")
+    if polygon_count > 1:
+        raise GeoJSONError(
+            f"Found {polygon_count} polygons in the GeoJSON — only one is supported. "
+            "Delete the others on geojson.io and re-export."
+        )
 
     coords = polygon_geom.get("coordinates")
     if not coords or not isinstance(coords, list) or not coords[0]:
@@ -252,10 +258,10 @@ def parse_geojson_polygon(text: str) -> list[list[float]]:
         if not isinstance(pt, (list, tuple)) or len(pt) < 2:
             raise GeoJSONError(f"Bad point in polygon: {pt}")
         lng, lat = float(pt[0]), float(pt[1])
-        # Sanity check — refuse polygons obviously not in Israel
-        if not (29 < lat < 34 and 33 < lng < 36):
+        # Loose sanity check — polygons need plausible Earth coordinates.
+        if not (-90 < lat < 90 and -180 < lng < 180):
             raise GeoJSONError(
-                f"Point ({lat}, {lng}) is outside Israel — did you draw on the wrong map?"
+                f"Point ({lat}, {lng}) is not valid lat/lng — check coordinate order."
             )
         result.append([lat, lng])
 

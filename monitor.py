@@ -94,6 +94,16 @@ def _process_matching(matching, source_label: str, dry_run: bool):
         logger.info("[%s] Sent %d Slack notifications", source_label, sent)
 
 
+def _cdp_reachable() -> bool:
+    """Quick check that the debug Chrome is running on port 9222."""
+    import urllib.request
+    try:
+        urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2).read()
+        return True
+    except Exception:
+        return False
+
+
 def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
     """Scrape Facebook groups, parse with Claude, notify on matches.
 
@@ -106,18 +116,6 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
 
     if not FACEBOOK_GROUPS:
         logger.info("No Facebook groups configured — skipping FB scan.")
-        return
-
-    # Auto-skip if Chrome debug isn't reachable. Avoids noisy exceptions when
-    # the user has FB enabled but forgot to start the debug Chrome.
-    import urllib.request
-    try:
-        urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2).read()
-    except Exception:
-        logger.info(
-            "Chrome debug port 9222 not reachable — skipping FB scan. "
-            "Run ./start_chrome_debug.sh to enable Facebook scraping."
-        )
         return
 
     logger.info("Scraping %d Facebook groups...", len(FACEBOOK_GROUPS))
@@ -206,6 +204,19 @@ def run_scan(dry_run: bool = False, bootstrap: bool = False):
     logger.info("=== Starting apartment scan at %s [%s] ===", start.isoformat(), mode)
 
     reset_alerts()
+
+    # Both scrapers go through the user's logged-in Chrome via CDP. If that
+    # Chrome isn't running, log a clear message and skip — silent empty scans
+    # are the most common confusing failure mode for friends.
+    if not _cdp_reachable():
+        logger.warning(
+            "Chrome debug port 9222 not reachable — both Yad2 and Facebook "
+            "scrapes will be skipped. Run ./start_chrome_debug.sh, log into "
+            "Yad2 (and Facebook if enabled), then try again."
+        )
+        elapsed = (datetime.now() - start).total_seconds()
+        logger.info("=== Scan aborted in %.1f seconds (Chrome debug unreachable) ===", elapsed)
+        return
 
     # Yad2 first (fast, always reliable). Facebook second (slow, opt-in).
     try:
