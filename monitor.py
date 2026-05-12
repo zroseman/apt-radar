@@ -16,7 +16,7 @@ import logging
 import sys
 from datetime import datetime
 
-from config import FACEBOOK_GROUPS, LOG_PATH, YAD2_SEARCH_URLS
+from config import FACEBOOK_ENABLED, FACEBOOK_GROUPS, LOG_PATH, YAD2_SEARCH_URLS
 from chrome_scraper import scrape_all_groups
 from post_parser import parse_and_filter_posts
 from yad2_scraper import scrape_yad2_searches, yad2_cards_to_listings
@@ -100,12 +100,16 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
     bootstrap=True: mark every scraped post as seen and skip notifications.
     Used once on initial deployment to clear out the existing backlog.
     """
+    if not FACEBOOK_ENABLED:
+        logger.info("Facebook scanning disabled in settings — skipping FB scan.")
+        return
+
     if not FACEBOOK_GROUPS:
         logger.info("No Facebook groups configured — skipping FB scan.")
         return
 
     # Auto-skip if Chrome debug isn't reachable. Avoids noisy exceptions when
-    # the user is on the Yad2-only path or hasn't started the debug Chrome.
+    # the user has FB enabled but forgot to start the debug Chrome.
     import urllib.request
     try:
         urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2).read()
@@ -203,15 +207,16 @@ def run_scan(dry_run: bool = False, bootstrap: bool = False):
 
     reset_alerts()
 
-    try:
-        run_facebook_scan(dry_run=dry_run, bootstrap=bootstrap)
-    except Exception:
-        logger.exception("Facebook scan failed")
-
+    # Yad2 first (fast, always reliable). Facebook second (slow, opt-in).
     try:
         run_yad2_scan(dry_run=dry_run, bootstrap=bootstrap)
     except Exception:
         logger.exception("Yad2 scan failed")
+
+    try:
+        run_facebook_scan(dry_run=dry_run, bootstrap=bootstrap)
+    except Exception:
+        logger.exception("Facebook scan failed")
 
     elapsed = (datetime.now() - start).total_seconds()
     logger.info("=== Scan completed in %.1f seconds ===", elapsed)

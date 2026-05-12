@@ -463,15 +463,15 @@
       </div>
     </div>
 
-    <details class="fb-section" {% if settings.facebook_groups %}open{% endif %}>
+    <details class="fb-section" {% if settings.facebook_enabled or settings.facebook_groups %}open{% endif %}>
       <summary>
         <div>
           <div class="fb-title">Facebook groups <span style="font-weight:400;color:#78909c;">(optional)</span></div>
           <div class="fb-sub">
-            {% if settings.facebook_groups %}
-              {{ settings.facebook_groups|length }} active group{{ 's' if settings.facebook_groups|length != 1 }}.
+            {% if settings.facebook_enabled %}
+              <strong style="color:#2e7d32;">ON</strong> — {{ settings.facebook_groups|length }} active group{{ 's' if settings.facebook_groups|length != 1 }}.
             {% else %}
-              Not configured. Adds ~10% more listings — takes ~10 minutes to set up.
+              <strong style="color:#78909c;">OFF</strong> — Yad2-only path. Adds ~10% more listings if enabled; ~10 min to set up.
             {% endif %}
           </div>
         </div>
@@ -479,6 +479,17 @@
       </summary>
 
       <div class="fb-body">
+        <div class="field" style="margin-bottom:1rem;background:#f5f7fa;padding:0.75rem 0.9rem;border-radius:8px;border:1px solid #cfd8dc;">
+          <div class="checkbox-row">
+            <input type="checkbox" id="facebook_enabled" name="facebook_enabled"
+                   {% if settings.facebook_enabled %}checked{% endif %}>
+            <label for="facebook_enabled"><strong>Enable Facebook scanning</strong></label>
+          </div>
+          <div class="hint" style="margin-top:0.4rem;">
+            When off, Facebook is never scraped — even if Chrome debug is running and groups are listed below.
+          </div>
+        </div>
+
         <p class="help">
           Facebook scraping requires a separate Chrome instance running with remote debugging.
           Once set up, Apt Radar can read posts from any group your Facebook account belongs to.

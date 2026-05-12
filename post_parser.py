@@ -1,6 +1,11 @@
 """
 Parse Facebook group posts for apartment listing details (Hebrew + English).
-Uses Claude API to properly understand Hebrew text and classify posts.
+Uses an LLM (Claude or OpenAI) to understand Hebrew text and classify posts.
+
+Provider selection (in priority order):
+  1. If ANTHROPIC_API_KEY is set → use Claude (default; tested path)
+  2. Else if OPENAI_API_KEY is set → use OpenAI gpt-4o-mini
+  3. Else → raise on first parse attempt
 """
 
 import json
@@ -8,11 +13,40 @@ import logging
 import os
 from dataclasses import dataclass, field
 
-import anthropic
-
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic()
+
+def _llm_provider() -> str:
+    """Return 'anthropic' or 'openai' depending on which key is set."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    raise RuntimeError(
+        "No LLM API key set. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to .env. "
+        "Anthropic is recommended (it's what's been tested)."
+    )
+
+
+# Lazily-constructed clients (only the chosen provider's client is instantiated).
+_anthropic_client = None
+_openai_client = None
+
+
+def _get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+        _anthropic_client = anthropic.Anthropic()
+    return _anthropic_client
+
+
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        from openai import OpenAI
+        _openai_client = OpenAI()
+    return _openai_client
 
 CLASSIFICATION_PROMPT = """You are classifying a Facebook group post about apartments in Tel Aviv.
 Read the post carefully (it may be in Hebrew, English, or both) and extract structured data.
@@ -85,22 +119,31 @@ class ApartmentListing:
 
 
 def classify_post(text: str) -> dict | None:
-    """Use Claude to classify and extract data from a post."""
+    """Use the configured LLM to classify and extract data from a post."""
+    prompt = f"{CLASSIFICATION_PROMPT}\n\nPOST TEXT:\n{text[:2000]}"
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=500,
-            messages=[
-                {"role": "user", "content": f"{CLASSIFICATION_PROMPT}\n\nPOST TEXT:\n{text[:2000]}"}
-            ],
-        )
-        raw = response.content[0].text.strip()
-        # Strip markdown code fences if present
+        provider = _llm_provider()
+        if provider == "anthropic":
+            response = _get_anthropic_client().messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = response.content[0].text.strip()
+        else:  # openai
+            response = _get_openai_client().chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=500,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if the model wrapped output (defensive).
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         return json.loads(raw)
     except Exception:
-        logger.exception("Claude API classification failed")
+        logger.exception("LLM classification failed")
         return None
 
 

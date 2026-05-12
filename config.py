@@ -18,6 +18,7 @@ from settings import load_settings as _load_settings
 
 _s = _load_settings()
 FACEBOOK_GROUPS = list(_s["facebook_groups"])
+FACEBOOK_ENABLED = bool(_s.get("facebook_enabled", False))
 YAD2_SEARCH_URLS = list(_s["yad2_search_urls"])
 INCLUSION_POLYGON = [tuple(p) for p in _s["polygon"]]
 

@@ -50,16 +50,19 @@ Facebook path: check `/Applications/Google Chrome.app` exists.
 
 Run `bash setup.sh`. Verify `.venv/bin/python3` exists.
 
-### Step 3 — Anthropic API key
+### Step 3 — LLM API key (Anthropic or OpenAI)
 
-Tell the user: "Apt Radar uses Claude to parse listing text. I need your Anthropic API key. If you don't have one, get it at https://console.anthropic.com/settings/keys. Paste it here."
+Apt Radar uses an LLM to parse listing text. Either provider works; **Anthropic (Claude) is the tested path** and Hebrew handling is slightly better. OpenAI is fine too.
 
-(If they ask whether they can use OpenAI or another LLM: no, not without code changes — the listing parser is hardcoded to the Anthropic SDK. They'd need to modify `post_parser.py` to switch.)
+Ask the user:
+> "Do you want to use Anthropic (Claude, recommended) or OpenAI? If you don't have a key for either, get one at https://console.anthropic.com/settings/keys or https://platform.openai.com/api-keys. Paste it here."
 
-When they paste, write to `.env` **via the helper script** (the Write tool is blocked from editing `.env` files):
+Detect the provider from the key prefix (`sk-ant-...` = Anthropic, `sk-...` = OpenAI) or just ask. Save via the helper script (the Write tool is blocked from editing `.env`):
 
 ```bash
 ./scripts/configure_env.sh ANTHROPIC_API_KEY=<their-key>
+# OR
+./scripts/configure_env.sh OPENAI_API_KEY=<their-key>
 ```
 
 If they want a different port too (e.g., 5056 because something else is on 5055), include it:
@@ -68,9 +71,9 @@ If they want a different port too (e.g., 5056 because something else is on 5055)
 ./scripts/configure_env.sh ANTHROPIC_API_KEY=<key> APT_RADAR_PORT=5056
 ```
 
-### Step 4 — (Facebook path only) Launch debug Chrome
+### Step 4 — (Facebook path only) Launch debug Chrome + enable FB
 
-Skip if Yad2-only.
+Skip if Yad2-only — leave `facebook_enabled` at its default `False`.
 
 Tell them: "I'll launch a dedicated Chrome with its own profile, just for Apt Radar. It won't touch your daily Chrome."
 
@@ -80,6 +83,14 @@ Tell them: "I'll launch a dedicated Chrome with its own profile, just for Apt Ra
 4. Verify: `curl -s http://127.0.0.1:9222/json/version` returns JSON.
 
 If verification fails, see "Chrome troubleshooting" at the bottom.
+
+**Then turn on the FB toggle** in settings so the scanner knows the user opted in:
+
+```bash
+./.venv/bin/python3 -c "from settings import save_settings; save_settings({'facebook_enabled': True})"
+```
+
+This sets `facebook_enabled: True` in `settings.json`. When the user later visits `/settings`, the FB section will show as ON and pre-expanded.
 
 ### Step 5 — Start the dashboard
 
@@ -164,12 +175,20 @@ Tell them:
 - `run_monitor.sh`, `run_dashboard.sh`, `start_chrome_debug.sh`, `install_launchd.sh`
 
 **Env vars (`.env`):**
-- `ANTHROPIC_API_KEY` (required)
+- `ANTHROPIC_API_KEY` OR `OPENAI_API_KEY` (one of these is required; Anthropic is preferred when both are set)
 - `APT_RADAR_SLACK_WEBHOOK` (optional)
+- `APT_RADAR_PORT` (optional; defaults to 5055)
 
 **Internal env vars (set by wrappers):**
 - `TLV_APT_FORCE=1` — bypass time-window guard
 - `TLV_APT_FOREGROUND=1` — open CDP tabs in foreground (needed for FB)
+
+**LLM provider selection** (in `post_parser.py`):
+- `ANTHROPIC_API_KEY` set → Claude (`claude-haiku-4-5-20251001`, the tested model)
+- Else `OPENAI_API_KEY` set → OpenAI (`gpt-4o-mini`, with JSON mode)
+- Else → raises with a clear error
+
+**Facebook on/off** is a single switch: `settings["facebook_enabled"]` (boolean). When `False`, `run_facebook_scan()` returns immediately. The dashboard exposes this as a toggle in the FB section.
 
 ## Chrome troubleshooting
 

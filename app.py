@@ -163,6 +163,7 @@ def settings_page():
             min_sqm = int(form["min_sqm"])
             min_bathrooms = float(form["min_bathrooms"])
             sublet_ok = form.get("sublet_ok") == "on"
+            facebook_enabled = form.get("facebook_enabled") == "on"
 
             # Cross-field validation
             if min_rent < 0 or max_rent < 0 or ideal_max_rent < 0:
@@ -206,6 +207,7 @@ def settings_page():
                 "min_sqm": min_sqm,
                 "min_bathrooms": min_bathrooms,
                 "sublet_ok": sublet_ok,
+                "facebook_enabled": facebook_enabled,
                 "polygon": polygon,
                 "yad2_search_urls": new_urls,
                 "facebook_groups": fb_groups,

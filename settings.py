@@ -34,6 +34,11 @@ DEFAULTS: dict = {
     "min_sqm": 90,
     "min_bathrooms": 1,
     "sublet_ok": True,
+    # Facebook scanning is OFF by default. Users opt in via the dashboard toggle
+    # (or the wizard sets it to True when they pick the Yad2+FB path). When
+    # False, no FB scraping happens even if Chrome debug is reachable and
+    # facebook_groups is populated.
+    "facebook_enabled": False,
     # Polygon stored as list of [lat, lng] pairs (NOT GeoJSON's lng/lat order).
     # Default polygon covers Old North, Tel Aviv.
     "polygon": [
