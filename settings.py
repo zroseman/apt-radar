@@ -28,8 +28,8 @@ SETTINGS_PATH = Path(__file__).parent / "settings.json"
 # scan immediately and see real results. Non-Israeli users replace via the UI.
 DEFAULTS: dict = {
     "min_rent": 10000,
-    "max_rent": 25000,
-    "ideal_max_rent": 22000,
+    "max_rent": 20000,
+    "ideal_max_rent": 15000,
     "min_rooms": 4,
     "min_sqm": 90,
     "min_bathrooms": 1,
@@ -45,8 +45,8 @@ DEFAULTS: dict = {
     # every Yad2 result through a Tel Aviv-shaped filter.
     "polygon": [],
     "yad2_search_urls": [
-        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.081987%2C34.764798%2C32.096724%2C34.787711",
-        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=25000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.071149%2C34.761555%2C32.085888%2C34.784468",
+        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=20000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.081987%2C34.764798%2C32.096724%2C34.787711",
+        "https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=10000&maxPrice=20000&minRooms=4&zoom=15&area=1&city=5000&neighborhood=1461&bBox=32.071149%2C34.761555%2C32.085888%2C34.784468",
     ],
     # Empty by default — Facebook scraping is opt-in (requires Chrome debug setup).
     # See STARTER_FACEBOOK_GROUPS below for a curated set the user can add.

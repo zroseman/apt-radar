@@ -435,7 +435,16 @@
         <label for="geojson">New polygon (paste GeoJSON to replace)</label>
         <textarea id="geojson" name="geojson"
                   placeholder='Paste the GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
-        <div class="hint">Must be a valid Polygon inside Israel.</div>
+        <div class="hint">Must be a valid Polygon.</div>
+      </div>
+
+      <div class="field" style="margin-top:0.75rem;">
+        <button type="button" class="btn-secondary" id="applyPolygonToYad2Btn" onclick="applyPolygonToYad2()">
+          Apply this polygon to Yad2 URLs ↓
+        </button>
+        <div class="hint" id="applyPolygonHint">
+          Replaces the Yad2 URLs below with one generated from this polygon's bounding box.
+        </div>
       </div>
     </div>
 
@@ -586,29 +595,31 @@ function buildYad2UrlFromRing(ring) {
   return `https://www.yad2.co.il/realestate/rent?minPrice=${minRent}&maxPrice=${maxRent}&minRooms=${minRooms}&bBox=${bbox}`;
 }
 
-(function () {
+function applyPolygonToYad2() {
   const polygonTa = document.getElementById('geojson');
   const yad2Ta = document.getElementById('yad2_search_urls');
+  const hint = document.getElementById('applyPolygonHint');
   if (!polygonTa || !yad2Ta) return;
 
-  polygonTa.addEventListener('paste', () => {
-    // Wait for the paste to actually land in the textarea, then offer to regenerate.
-    setTimeout(() => {
-      const text = polygonTa.value.trim();
-      if (!text) return;
-      const ring = extractPolygon(text);
-      if (!ring) return;  // invalid GeoJSON — will be caught on save
-      const newUrl = buildYad2UrlFromRing(ring);
-      const existing = yad2Ta.value.trim();
-      const msg = existing
-        ? 'You pasted a new geographic polygon.\n\nReplace your current Yad2 search URLs with one generated from this new area?\n\nOK = regenerate. Cancel = keep the existing URLs.'
-        : 'Generate a Yad2 search URL from this polygon?\n\nOK = add it to the Yad2 URLs field. Cancel = leave blank.';
-      if (confirm(msg)) {
-        yad2Ta.value = newUrl;
-      }
-    }, 50);
-  });
-})();
+  const text = polygonTa.value.trim();
+  if (!text) {
+    hint.textContent = "Paste a GeoJSON polygon above first, then click this button.";
+    hint.style.color = "#c62828";
+    return;
+  }
+  const ring = extractPolygon(text);
+  if (!ring) {
+    hint.textContent = "Couldn't parse the GeoJSON. Check the format (must be a FeatureCollection with a Polygon).";
+    hint.style.color = "#c62828";
+    return;
+  }
+  const newUrl = buildYad2UrlFromRing(ring);
+  yad2Ta.value = newUrl;
+  hint.textContent = "Done — Yad2 URLs replaced. Click Save settings to apply.";
+  hint.style.color = "#2e7d32";
+  // Scroll the Yad2 textarea into view so user can verify
+  yad2Ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 </script>
 
 </body>
