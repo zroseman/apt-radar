@@ -277,6 +277,37 @@ def get_listings(
         conn.close()
 
 
+def archive_all_pending(search_config_id: int | None = None) -> int:
+    """Bulk-archive every Pending listing. Returns the number archived.
+
+    "Archived" is a soft hide: the listings stay in the DB (so seen_posts
+    dedup keeps working — future scans won't re-add them) but the dashboard
+    Pending tab stops showing them. Saved / Rejected listings are untouched.
+
+    If search_config_id is set, only listings tagged with that config (plus
+    NULL = pre-tagging migration rows) are archived. None = archive all
+    pending regardless of config.
+    """
+    conn = _get_connection()
+    now = datetime.utcnow().isoformat()
+    try:
+        if search_config_id is not None:
+            cur = conn.execute(
+                "UPDATE listings SET status = 'archived', updated_at = ? "
+                "WHERE status = 'pending' AND (search_config_id = ? OR search_config_id IS NULL)",
+                (now, search_config_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE listings SET status = 'archived', updated_at = ? WHERE status = 'pending'",
+                (now,),
+            )
+        conn.commit()
+        return cur.rowcount or 0
+    finally:
+        conn.close()
+
+
 def update_listing_status(listing_id: int, status: str) -> bool:
     """Update listing status. If rejecting, also add fingerprint to rejected table."""
     conn = _get_connection()

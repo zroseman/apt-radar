@@ -69,6 +69,37 @@
   .scan-btn:hover:not(:disabled) { background: #4fd1b8; }
   .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+  .archive-bar {
+    background: #fff;
+    border-radius: 12px;
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .archive-bar .label {
+    font-size: 0.82rem;
+    color: #455a64;
+  }
+  .archive-btn {
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #ffcc80;
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .archive-btn:hover { background: #ffe0b2; }
+  .archive-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
   .tabs {
     display: flex;
     gap: 0;
@@ -326,6 +357,13 @@
     </div>
   {% endif %}
 
+  {% if current_tab == 'pending' and listings %}
+    <div class="archive-bar">
+      <div class="label">Done reviewing? Hide all of these so only new listings appear next time.</div>
+      <button class="archive-btn" id="archivePendingBtn" onclick="archiveAllPending()">Archive all</button>
+    </div>
+  {% endif %}
+
   {% if not listings %}
     <div class="empty-state">
       {% if current_tab == 'pending' %}
@@ -468,6 +506,34 @@ function startScan() {
 
 // On page load, check if a scan is already running (e.g., started in another tab)
 pollScanStatus();
+
+function archiveAllPending() {
+  const count = document.querySelectorAll('.card:not(.hiding)').length;
+  if (!confirm(
+    `Archive all ${count} pending listing${count === 1 ? '' : 's'}? ` +
+    `They'll be hidden from the dashboard, but future scans will still ` +
+    `recognize them so duplicates don't reappear. (Saved & Rejected tabs are unaffected.)`
+  )) return;
+
+  const btn = document.getElementById('archivePendingBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Archiving…'; }
+
+  fetch('/api/listings/archive-pending', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        // Just reload — easiest way to refresh counts, banners, etc.
+        window.location.reload();
+      } else {
+        alert(d.error || 'Failed to archive');
+        if (btn) { btn.disabled = false; btn.textContent = 'Archive all'; }
+      }
+    })
+    .catch(() => {
+      alert('Network error — listings not archived');
+      if (btn) { btn.disabled = false; btn.textContent = 'Archive all'; }
+    });
+}
 
 function setStatus(id, action) {
   const card = document.getElementById('card-' + id);

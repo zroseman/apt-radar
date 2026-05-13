@@ -11,7 +11,7 @@ from pathlib import Path
 
 from flask import Flask, render_template, jsonify, request, redirect
 
-from db import get_listings, update_listing_status
+from db import archive_all_pending, get_listings, update_listing_status
 from settings import (
     STARTER_FACEBOOK_GROUPS,
     FacebookURLError,
@@ -104,6 +104,14 @@ def api_reject(listing_id):
 def api_pending(listing_id):
     update_listing_status(listing_id, "pending")
     return jsonify({"ok": True, "status": "pending"})
+
+
+@app.route("/api/listings/archive-pending", methods=["POST"])
+def api_archive_pending():
+    """Soft-hide every currently-Pending listing. Future scans still see
+    the post_id in seen_posts so duplicates won't reappear."""
+    count = archive_all_pending(search_config_id=_current_search_config_id())
+    return jsonify({"ok": True, "archived": count})
 
 
 # --- Manual scan trigger ---
