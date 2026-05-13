@@ -266,16 +266,28 @@ def _add_page_param(url: str, page: int) -> str:
     return urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
 
 
-def scrape_yad2_search(url: str, max_pages: int = 10) -> list[dict]:
+def scrape_yad2_search(
+    url: str,
+    max_pages: int = 10,
+    max_listings: int = 100,
+    seen_ids: set[str] | None = None,
+) -> list[dict]:
     """Open a Yad2 search URL and paginate through results.
 
     Yad2's initial __NEXT_DATA__ only contains the first batch of listings
-    (~40-50). To get full coverage we iterate &page=1,2,... until either:
-      - A page returns 0 new (unseen-in-this-scrape) listings
-      - We hit max_pages
+    (~40-50). To get full coverage we iterate &page=1,2,... but stop when
+    we hit any of these limits:
+      - `max_listings` total cards collected (default 100 — more than a day's
+        new inflow for any normal search)
+      - `max_pages` (safety cap)
+      - A page returns 0 new (this-scrape) tokens
+      - A page has 0 unseen listings — we've caught up to last scan's results
+        (Yad2 sorts newest-first, so once we hit a fully-seen page everything
+        after is also already-seen)
 
     Returns deduplicated listings with inline lat/lon attached.
     """
+    seen_ids = seen_ids or set()
     all_listings: dict[str, dict] = {}
     source_bbox = bbox_from_yad2_url(url)
     if source_bbox:
@@ -288,29 +300,46 @@ def scrape_yad2_search(url: str, max_pages: int = 10) -> list[dict]:
 
     for page in range(1, max_pages + 1):
         page_url = _add_page_param(url, page) if page > 1 else url
-        # Suppress the "0 cards" Slack alert for pages > 1 — end-of-results
-        # naturally returns an empty page and that's not an error.
         page_listings = _scrape_yad2_search_page(page_url, alert_on_empty=(page == 1))
         if not page_listings:
             logger.info("Yad2: page %d returned 0 listings — stopping pagination", page)
             break
 
-        new_count = 0
+        new_count = 0           # tokens not yet in all_listings (this scrape)
+        unseen_count = 0        # tokens not in the seen database (truly new to us)
         for l in page_listings:
             tok = l.get("token")
+            pid = l.get("id")
             if tok and tok not in all_listings:
                 if source_bbox:
                     l["source_bbox"] = source_bbox
                 all_listings[tok] = l
                 new_count += 1
-        logger.info("Yad2: page %d — %d listings (%d new); total so far %d",
-                    page, len(page_listings), new_count, len(all_listings))
+                if pid and pid not in seen_ids:
+                    unseen_count += 1
+        logger.info(
+            "Yad2: page %d — %d listings (%d new to scrape, %d unseen by DB); total %d/%d",
+            page, len(page_listings), new_count, unseen_count,
+            len(all_listings), max_listings,
+        )
 
         if new_count == 0:
             logger.info("Yad2: page %d had no new tokens — stopping pagination", page)
             break
+        if unseen_count == 0:
+            logger.info(
+                "Yad2: page %d had zero unseen-by-DB listings — we've caught up; stopping",
+                page,
+            )
+            break
+        if len(all_listings) >= max_listings:
+            logger.info(
+                "Yad2: hit max_listings=%d — stopping pagination",
+                max_listings,
+            )
+            break
 
-        time.sleep(1.5)  # gentle pacing between pages
+        time.sleep(1.5)
 
     return list(all_listings.values())
 
@@ -445,12 +474,22 @@ def fetch_listing_coords(url: str) -> tuple[float, float] | None:
         _close_tab(tab)
 
 
-def scrape_yad2_searches(urls: list[str]) -> list[dict]:
-    """Scrape multiple Yad2 search URLs and return a deduplicated list of cards."""
+def scrape_yad2_searches(
+    urls: list[str],
+    seen_ids: set[str] | None = None,
+    max_listings_per_url: int = 100,
+) -> list[dict]:
+    """Scrape multiple Yad2 search URLs and return a deduplicated list of cards.
+
+    seen_ids: pass db.get_all_seen_ids() so each URL's pagination can stop
+    early when it catches up to already-scraped listings.
+    """
     by_token: dict[str, dict] = {}
     for url in urls:
         try:
-            cards = scrape_yad2_search(url)
+            cards = scrape_yad2_search(
+                url, max_listings=max_listings_per_url, seen_ids=seen_ids,
+            )
             for c in cards:
                 token = c.get("token")
                 if token and token not in by_token:

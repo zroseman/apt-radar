@@ -166,7 +166,10 @@ def run_yad2_scan(dry_run: bool = False, bootstrap: bool = False):
         return
 
     logger.info("Scraping %d Yad2 search URLs...", len(YAD2_SEARCH_URLS))
-    cards = scrape_yad2_searches(YAD2_SEARCH_URLS)
+    # Pass already-seen IDs so each URL's pagination stops early once we
+    # catch up to listings we've already processed.
+    seen_yad2_ids = get_all_seen_ids()
+    cards = scrape_yad2_searches(YAD2_SEARCH_URLS, seen_ids=seen_yad2_ids)
     logger.info("Total Yad2 cards: %d", len(cards))
 
     if not cards:
