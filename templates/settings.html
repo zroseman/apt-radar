@@ -409,38 +409,6 @@
     </div>
 
     <div class="section">
-      <h2>Geographic filter <span style="font-weight:400;color:#78909c;">(optional, for Yad2)</span></h2>
-      <p class="help">
-        Strict geographic filter applied to Yad2 results <strong>after</strong> scraping.
-        Useful because Yad2 sometimes returns "promoted" cards outside the geographic
-        filter set in your search URL. Leave blank to skip — the Yad2 URLs you paste
-        below will be the only geographic filter.
-      </p>
-
-      <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">How to set or change the area:</p>
-      <ol class="steps">
-        <li>Open <a href="https://geojson.io" target="_blank" rel="noopener" class="external">geojson.io ↗</a> in a new tab.</li>
-        <li>Pan/zoom the map to your area.</li>
-        <li>Click the polygon tool (pentagon icon, top-right of the map).</li>
-        <li>Click points on the map to draw your area; double-click the last point to close it.</li>
-        <li>The right panel shows the full GeoJSON. Copy <strong>all of it</strong>.</li>
-        <li>Paste into the "New polygon" field below.</li>
-      </ol>
-
-      <div class="field">
-        <label for="geojson_current">Current polygon (read-only — for reference)</label>
-        <textarea id="geojson_current" readonly>{{ polygon_geojson }}</textarea>
-      </div>
-
-      <div class="field">
-        <label for="geojson">New polygon (paste GeoJSON to replace)</label>
-        <textarea id="geojson" name="geojson"
-                  placeholder='Paste the GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
-        <div class="hint">Must be a valid Polygon. Leave blank to disable the geographic filter.</div>
-      </div>
-    </div>
-
-    <div class="section">
       <h2>Facebook target area <span style="font-weight:400;color:#78909c;">(optional, for Facebook)</span></h2>
       <p class="help">
         Free-text description of your target area. Used by Claude when classifying
@@ -451,29 +419,27 @@
         <textarea id="target_area_description" name="target_area_description"
                   placeholder="e.g. The target area is Old North Tel Aviv, bounded by Bograshov to the south, Yarkon River to the north..."
                   style="min-height:200px;">{{ settings.target_area_description }}</textarea>
-        <div class="hint">Used only for Facebook posts. Yad2 listings are filtered by the polygon above.</div>
+        <div class="hint">Used only for Facebook posts. Yad2 listings are filtered by the bBox in your Yad2 search URL.</div>
       </div>
     </div>
 
     <div class="section">
       <h2>Yad2 search URLs</h2>
       <p class="help">
-        One Yad2 search URL per line. These tell Apt Radar <em>what to fetch from Yad2</em>.
-        <strong>Leave blank to auto-generate one from your geographic polygon above.</strong>
-        Price and rooms params get rewritten from your criteria when you save.
+        The URL Apt Radar scrapes on each scan. Most users have one — start there.
+        For multiple search areas, add more URLs (one per line) — each adds ~20-80 seconds to scan time.
       </p>
       <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">How to get a Yad2 URL:</p>
       <ol class="steps">
         <li>Open <a href="https://www.yad2.co.il/realestate/rent" target="_blank" rel="noopener" class="external">yad2.co.il/realestate/rent ↗</a></li>
-        <li>Tip: log in first — Yad2 throttles anonymous traffic and may show a captcha.</li>
-        <li>Set your filters (area, price, rooms) and run the search.</li>
+        <li>Set your filters (area, price, rooms, sqm) and run the search.</li>
         <li>Copy the URL from your browser's address bar.</li>
-        <li>Paste it below. Add more (one per line) if you want multiple search areas.</li>
+        <li>Paste it below.</li>
       </ol>
       <div class="field">
         <label for="yad2_search_urls">Yad2 URLs</label>
         <textarea id="yad2_search_urls" name="yad2_search_urls"
-                  placeholder="Paste one or more Yad2 search URLs (one per line). Leave blank to auto-generate from your polygon.">{% for url in yad2_urls %}{{ url }}
+                  placeholder="Paste your Yad2 search URL(s), one per line.">{% for url in yad2_urls %}{{ url }}
 {% endfor %}</textarea>
         <div class="hint">{{ yad2_urls|length }} URL{{ 's' if yad2_urls|length != 1 }} configured.</div>
       </div>
@@ -563,49 +529,8 @@ function copyStarterGroups() {
   ta.focus();
 }
 
-// --- Polygon → Yad2 URL regeneration prompt ---
-// When the user pastes a polygon, ask whether to rebuild Yad2 search URLs from
-// its bounding box. Avoids the silent "manual paste beats auto-gen" trap.
-function extractPolygon(geojsonText) {
-  let data;
-  try { data = JSON.parse(geojsonText); } catch { return null; }
-  let geom = null;
-  if (data && data.type === 'FeatureCollection') {
-    for (const f of (data.features || [])) {
-      if (f && f.geometry && f.geometry.type === 'Polygon') { geom = f.geometry; break; }
-    }
-  } else if (data && data.type === 'Feature' && data.geometry && data.geometry.type === 'Polygon') {
-    geom = data.geometry;
-  } else if (data && data.type === 'Polygon') {
-    geom = data;
-  }
-  if (!geom) return null;
-  const ring = geom.coordinates && geom.coordinates[0];
-  if (!ring || ring.length < 3) return null;
-  return ring;  // array of [lng, lat] pairs
-}
-
-function buildYad2UrlFromRing(ring) {
-  // GeoJSON is [lng, lat]; we need [lat, lng] for the bBox string.
-  // Mirrors yad2_url_from_polygon in settings.py — keep these in sync.
-  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-  for (const p of ring) {
-    const lng = p[0], lat = p[1];
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-  }
-  const minRent = parseInt(document.getElementById('min_rent').value || '0', 10);
-  // Normalize "4.0" -> "4" — Yad2 is picky about whole-number rooms.
-  const minRoomsRaw = parseFloat(document.getElementById('min_rooms').value || '0');
-  const minRooms = Number.isInteger(minRoomsRaw) ? String(minRoomsRaw) : String(minRoomsRaw);
-  const bbox = encodeURIComponent(`${minLat},${minLng},${maxLat},${maxLng}`);
-  return `https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=${minRent}&minRooms=${minRooms}&area=1&city=5000&bBox=${bbox}&zoom=14`;
-}
-
-// Polygon-to-Yad2-URL flow was removed in v2 — Yad2 doesn't honor URL bBox
-// (proven via live tests). Polygon is now a post-scrape filter only.
+// Polygon-related code removed — Yad2 uses its URL's built-in bBox as the
+// geographic filter, no separate polygon needed.
 </script>
 
 </body>

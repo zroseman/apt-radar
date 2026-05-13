@@ -141,6 +141,36 @@ def update_yad2_urls(urls: list[str], min_price: int, max_price: int, min_rooms:
     return [update_yad2_url(u, min_price, max_price, min_rooms) for u in urls]
 
 
+def extract_criteria_from_yad2_url(url: str) -> dict:
+    """Parse a Yad2 search URL and return any criteria found.
+
+    Returns a dict with optional keys: min_rent, max_rent, min_rooms,
+    max_rooms, min_sqm. Missing keys mean the URL didn't include them.
+    The wizard uses this to ask the user "looks like X, is that right?"
+    instead of re-asking for every parameter."""
+    out: dict = {}
+    try:
+        qs = parse_qs(urlparse(url).query)
+    except Exception:
+        return out
+    if "minPrice" in qs:
+        try: out["min_rent"] = int(qs["minPrice"][0])
+        except (ValueError, IndexError): pass
+    if "maxPrice" in qs:
+        try: out["max_rent"] = int(qs["maxPrice"][0])
+        except (ValueError, IndexError): pass
+    if "minRooms" in qs:
+        try: out["min_rooms"] = float(qs["minRooms"][0])
+        except (ValueError, IndexError): pass
+    if "maxRooms" in qs:
+        try: out["max_rooms"] = float(qs["maxRooms"][0])
+        except (ValueError, IndexError): pass
+    if "minSquaremeter" in qs:
+        try: out["min_sqm"] = int(qs["minSquaremeter"][0])
+        except (ValueError, IndexError): pass
+    return out
+
+
 def bbox_from_yad2_url(url: str) -> tuple[float, float, float, float] | None:
     """Extract `bBox=lat1,lng1,lat2,lng2` from a Yad2 search URL.
 

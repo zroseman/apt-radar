@@ -187,11 +187,11 @@ def settings_page():
             if min_rooms <= 0 or min_sqm <= 0 or min_bathrooms <= 0:
                 raise ValueError("Rooms / sqm / bathrooms must be positive")
 
-            geojson_text = (form.get("geojson") or "").strip()
             current = load_settings()
-            polygon = current["polygon"]
-            if geojson_text:
-                polygon = parse_geojson_polygon(geojson_text)
+            # Polygon is no longer surfaced in the UI — Yad2 uses its URL's
+            # built-in bBox as the geographic filter. Preserve any existing
+            # polygon in settings.json untouched for back-compat.
+            polygon = current.get("polygon", [])
 
             # Facebook groups: parsed from textarea (one URL per line). Empty = no FB scraping.
             fb_groups = parse_facebook_groups(form.get("facebook_groups") or "")
