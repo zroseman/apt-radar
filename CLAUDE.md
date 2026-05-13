@@ -52,26 +52,32 @@ Facebook path: check `/Applications/Google Chrome.app` exists.
 
 Run `bash setup.sh`. Verify `.venv/bin/python3` exists.
 
-### Step 3 — LLM API key (Anthropic or OpenAI)
+### Step 3 — LLM API key (Anthropic or OpenAI) + auto-pick a port
 
 Apt Radar uses an LLM to parse listing text. Either provider works; **Anthropic (Claude) is the tested path** and Hebrew handling is slightly better. OpenAI is fine too.
 
 Ask the user:
 > "Do you want to use Anthropic (Claude, recommended) or OpenAI? If you don't have a key for either, get one at https://console.anthropic.com/settings/keys or https://platform.openai.com/api-keys. Paste it here."
 
-Detect the provider from the key prefix (`sk-ant-...` = Anthropic, `sk-...` = OpenAI) or just ask. Save via the helper script (the Write tool is blocked from editing `.env`):
+Detect the provider from the key prefix (`sk-ant-...` = Anthropic, `sk-...` = OpenAI) or just ask.
+
+**Pick a free port for the dashboard.** Don't assume 5055 — the user may have something on it already (other dev servers, prior Apt Radar instances, etc.). Use the helper:
 
 ```bash
-./scripts/configure_env.sh ANTHROPIC_API_KEY=<their-key>
+PORT=$(./scripts/find_free_port.py)
+```
+
+Then save both the API key and the chosen port to `.env` (the Write tool is blocked from editing `.env`):
+
+```bash
+./scripts/configure_env.sh ANTHROPIC_API_KEY=<their-key> APT_RADAR_PORT=$PORT
 # OR
-./scripts/configure_env.sh OPENAI_API_KEY=<their-key>
+./scripts/configure_env.sh OPENAI_API_KEY=<their-key> APT_RADAR_PORT=$PORT
 ```
 
-If they want a different port too (e.g., 5056 because something else is on 5055), include it:
+Tell the user the chosen port: "Saved. The dashboard will run on port $PORT."
 
-```bash
-./scripts/configure_env.sh ANTHROPIC_API_KEY=<key> APT_RADAR_PORT=5056
-```
+Once `APT_RADAR_PORT` is in `.env`, every restart uses the same port — stable for bookmarks. To pick a new port later, just delete the line and re-run `find_free_port.py`.
 
 ### Step 4 — Launch the debug Chrome (both paths)
 
@@ -127,9 +133,26 @@ Wait for confirmation. Then enable Facebook scanning:
 
 ### Step 6 — Start the dashboard
 
-Run `./run_dashboard.sh &`. Verify `curl -s http://127.0.0.1:5055/` returns 200 (use the port from `.env` if they set `APT_RADAR_PORT`). Then `open http://localhost:5055/settings`.
+```bash
+./run_dashboard.sh &
+```
 
-Ask the user: "Did the Settings page load in your browser?" Wait for confirmation — if Flask died after backgrounding (port in use, bad env, etc.), you'll catch it here rather than in Step 8.
+Wait ~2 seconds, then verify using the port you saved in Step 3:
+
+```bash
+PORT=$(grep '^APT_RADAR_PORT=' .env | cut -d= -f2)
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:$PORT/"
+```
+
+Should print `200`. If it doesn't, tail `dashboard_stdout.log` for errors.
+
+Then open the settings page:
+
+```bash
+open "http://localhost:$PORT/settings"
+```
+
+Ask the user: "Did the Settings page load in your browser?" Wait for confirmation — if Flask died after backgrounding, you'll catch it here rather than in Step 8.
 
 ### Step 7 — Configure search criteria (in the web UI)
 
