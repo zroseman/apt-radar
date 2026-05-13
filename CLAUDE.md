@@ -204,7 +204,19 @@ Warn about lid-closed sleep — macOS often misses scheduled times when the lid 
 
 ### Step 9 — Facebook add-on (optional)
 
-Ask: "Want to add Facebook groups to the search? In my experience, most apartments posted on Facebook are also on Yad2, but it can catch some private agency listings or quick-flip rentals. Adds ~5 minutes to setup. Yes or no?"
+Ask:
+
+> "Want to add Facebook groups to the search?
+>
+> Quick context:
+> - Adds about 5 minutes to setup.
+> - In my experience, most apartments posted on Facebook are also on Yad2 — FB usually catches private agency listings and quick-flip rentals.
+>
+> **Important heads-up about scan time**: Facebook scans have to run in the *foreground* — Chrome will pop to the front several times for about 5 minutes during every scan, including the first one I'll run right after we finish setup, and every scheduled run from then on. There's no workaround (FB's feed virtualizes off-screen posts, so the tab has to actually render). Yad2 by contrast runs silently in the background.
+>
+> If you set scheduled scans to run during your work day, Facebook will disrupt your screen each time. Most people who enable FB schedule scans for early morning or late night to avoid the disruption.
+>
+> Still want Facebook? Yes or no?"
 
 If no, skip to Step 10.
 
