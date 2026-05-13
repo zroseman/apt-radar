@@ -18,12 +18,15 @@ else
     PYTHON="python3"
 fi
 
-"$PYTHON" <<PYEOF
+# Pass URL as Python argv (sys.argv[1]) to avoid bash 4.4+ ${var@Q} which
+# macOS bash 3.2 doesn't support.
+"$PYTHON" - "$URL" <<'PYEOF'
 import json
 import sys
+import time
 import urllib.request
 
-URL = ${URL@Q}
+URL = sys.argv[1]
 
 try:
     info = json.loads(urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=5).read())
@@ -34,7 +37,6 @@ ws_url = info.get("webSocketDebuggerUrl")
 if not ws_url:
     sys.exit("Chrome /json/version response missing webSocketDebuggerUrl")
 
-# Use websocket-client (already in requirements.txt) to call Target.createTarget.
 try:
     from websocket import create_connection
 except ImportError:
@@ -43,8 +45,6 @@ except ImportError:
 ws = create_connection(ws_url, timeout=10)
 try:
     ws.send(json.dumps({"id": 1, "method": "Target.createTarget", "params": {"url": URL}}))
-    # Drain messages until we see our id=1 response (CDP may interleave events).
-    import time
     deadline = time.time() + 5
     while time.time() < deadline:
         ws.settimeout(max(0.5, deadline - time.time()))

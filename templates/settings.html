@@ -580,8 +580,7 @@ function extractPolygon(geojsonText) {
 
 function buildYad2UrlFromRing(ring) {
   // GeoJSON is [lng, lat]; we need [lat, lng] for the bBox string.
-  // Yad2 requires the /tel-aviv-area path slug for bBox filtering to work
-  // (without it, Yad2 strips the bBox and shows all of TLV or redirects home).
+  // Mirrors yad2_url_from_polygon in settings.py — keep these in sync.
   let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
   for (const p of ring) {
     const lng = p[0], lat = p[1];
@@ -590,11 +589,12 @@ function buildYad2UrlFromRing(ring) {
     if (lng < minLng) minLng = lng;
     if (lng > maxLng) maxLng = lng;
   }
-  const minRent = document.getElementById('min_rent').value || '0';
-  const maxRent = document.getElementById('max_rent').value || '0';
-  const minRooms = document.getElementById('min_rooms').value || '0';
+  const minRent = parseInt(document.getElementById('min_rent').value || '0', 10);
+  // Normalize "4.0" -> "4" — Yad2 is picky about whole-number rooms.
+  const minRoomsRaw = parseFloat(document.getElementById('min_rooms').value || '0');
+  const minRooms = Number.isInteger(minRoomsRaw) ? String(minRoomsRaw) : String(minRoomsRaw);
   const bbox = encodeURIComponent(`${minLat},${minLng},${maxLat},${maxLng}`);
-  return `https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=${minRent}&maxPrice=${maxRent}&minRooms=${minRooms}&bBox=${bbox}&zoom=14`;
+  return `https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=${minRent}&minRooms=${minRooms}&area=1&city=5000&bBox=${bbox}&zoom=14`;
 }
 
 function applyPolygonToYad2() {
