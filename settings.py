@@ -133,15 +133,20 @@ def yad2_url_from_polygon(
     min_rooms: float,
 ) -> str:
     """Auto-generate a Yad2 rental search URL from a polygon's bounding box.
-    The polygon also acts as a post-scrape filter, so the resulting URL
-    may return some listings that get rejected by the polygon check."""
+
+    The path includes the `/tel-aviv-area` area slug — Yad2 requires this
+    for bBox filtering to work. Without it, Yad2 redirects to the homepage
+    or strips the bBox. Polygons outside Tel Aviv won't render correctly
+    with this slug; non-TLV users should paste their own Yad2 URLs.
+    `zoom=14` is included because Yad2's map UI uses it.
+    """
     min_lat, min_lng, max_lat, max_lng = polygon_bbox(polygon)
     bbox_raw = f"{min_lat},{min_lng},{max_lat},{max_lng}"
-    bbox_enc = urlencode({"bBox": bbox_raw})  # produces bBox=lat1%2Clng1%2Clat2%2Clng2
+    bbox_enc = urlencode({"bBox": bbox_raw})
     rooms_str = str(int(min_rooms)) if float(min_rooms).is_integer() else str(float(min_rooms))
     return (
-        f"https://www.yad2.co.il/realestate/rent?"
-        f"minPrice={int(min_price)}&maxPrice={int(max_price)}&minRooms={rooms_str}&{bbox_enc}"
+        f"https://www.yad2.co.il/realestate/rent/tel-aviv-area?"
+        f"minPrice={int(min_price)}&maxPrice={int(max_price)}&minRooms={rooms_str}&{bbox_enc}&zoom=14"
     )
 
 
