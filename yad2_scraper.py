@@ -257,8 +257,70 @@ def parse_yad2_card(text: str) -> dict:
     return out
 
 
-def scrape_yad2_search(url: str) -> list[dict]:
-    """Open a Yad2 search URL in real Chrome and extract listing cards."""
+def _add_page_param(url: str, page: int) -> str:
+    """Return the URL with `&page=N` set (replacing any existing page param)."""
+    from urllib.parse import urlencode, parse_qs, urlparse, urlunparse
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query, keep_blank_values=True)
+    qs["page"] = [str(page)]
+    return urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
+
+
+def scrape_yad2_search(url: str, max_pages: int = 10) -> list[dict]:
+    """Open a Yad2 search URL and paginate through results.
+
+    Yad2's initial __NEXT_DATA__ only contains the first batch of listings
+    (~40-50). To get full coverage we iterate &page=1,2,... until either:
+      - A page returns 0 new (unseen-in-this-scrape) listings
+      - We hit max_pages
+
+    Returns deduplicated listings with inline lat/lon attached.
+    """
+    all_listings: dict[str, dict] = {}
+    source_bbox = bbox_from_yad2_url(url)
+    if source_bbox:
+        logger.info(
+            "Yad2: source bBox = lat[%.4f, %.4f] lng[%.4f, %.4f]",
+            source_bbox[0], source_bbox[2], source_bbox[1], source_bbox[3],
+        )
+    else:
+        logger.info("Yad2: no bBox in URL %s — no auto geographic filter", url)
+
+    for page in range(1, max_pages + 1):
+        page_url = _add_page_param(url, page) if page > 1 else url
+        # Suppress the "0 cards" Slack alert for pages > 1 — end-of-results
+        # naturally returns an empty page and that's not an error.
+        page_listings = _scrape_yad2_search_page(page_url, alert_on_empty=(page == 1))
+        if not page_listings:
+            logger.info("Yad2: page %d returned 0 listings — stopping pagination", page)
+            break
+
+        new_count = 0
+        for l in page_listings:
+            tok = l.get("token")
+            if tok and tok not in all_listings:
+                if source_bbox:
+                    l["source_bbox"] = source_bbox
+                all_listings[tok] = l
+                new_count += 1
+        logger.info("Yad2: page %d — %d listings (%d new); total so far %d",
+                    page, len(page_listings), new_count, len(all_listings))
+
+        if new_count == 0:
+            logger.info("Yad2: page %d had no new tokens — stopping pagination", page)
+            break
+
+        time.sleep(1.5)  # gentle pacing between pages
+
+    return list(all_listings.values())
+
+
+def _scrape_yad2_search_page(url: str, alert_on_empty: bool = True) -> list[dict]:
+    """Open one page of Yad2 search results, return cards (with inline coords).
+
+    `alert_on_empty=False` suppresses the "0 cards" Slack alert — useful when
+    paginating, where end-of-results naturally returns an empty page.
+    """
     tab = _open_tab(url)
     if not tab or tab.get("client") is None:
         logger.error("Yad2: failed to open CDP tab for %s", url)
@@ -302,19 +364,20 @@ def scrape_yad2_search(url: str) -> list[dict]:
         listings = payload.get("listings", [])
         if not listings:
             logger.warning(
-                "Yad2: 0 cards extracted from %s — DOM selectors may be stale",
+                "Yad2: 0 cards extracted from %s — end of pagination or DOM selectors stale",
                 url,
             )
-            send_alert(
-                key="yad2_no_cards",
-                title="Yad2 returned 0 cards",
-                body=(
-                    "A Yad2 search page returned zero listings. This usually means "
-                    "either there are genuinely no matches *or* Yad2 changed their "
-                    "DOM and `yad2_scraper.py` needs the selectors updated.\n\n"
-                    f"URL: <{url}|search page>"
-                ),
-            )
+            if alert_on_empty:
+                send_alert(
+                    key="yad2_no_cards",
+                    title="Yad2 returned 0 cards",
+                    body=(
+                        "A Yad2 search page returned zero listings on page 1. This "
+                        "means either there are no matches *or* Yad2 changed their "
+                        "DOM and `yad2_scraper.py` needs the selectors updated.\n\n"
+                        f"URL: <{url}|search page>"
+                    ),
+                )
             return listings
 
         logger.info("Yad2: extracted %d cards from %s", len(listings), url)
@@ -336,25 +399,13 @@ def scrape_yad2_search(url: str) -> list[dict]:
         )
 
         # Attach lat/lon to each card so yad2_cards_to_listings doesn't have
-        # to fetch detail pages. Also tag each card with the bBox extracted
-        # from the source URL — used as an automatic geographic filter when
-        # the user hasn't drawn a custom polygon.
-        source_bbox = bbox_from_yad2_url(url)
-        if source_bbox:
-            logger.info(
-                "Yad2: source bBox = lat[%.4f, %.4f] lng[%.4f, %.4f]",
-                source_bbox[0], source_bbox[2], source_bbox[1], source_bbox[3],
-            )
-        else:
-            logger.info("Yad2: no bBox in URL %s — no auto geographic filter", url)
+        # to fetch detail pages.
         for l in listings:
             tok = l.get("token")
             c = coords_map.get(tok) if tok else None
             if c:
                 l["lat"] = c.get("lat")
                 l["lon"] = c.get("lon")
-            if source_bbox:
-                l["source_bbox"] = source_bbox
 
         return listings
 
