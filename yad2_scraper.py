@@ -40,34 +40,38 @@ logger = logging.getLogger(__name__)
 # props.pageProps.dehydratedState.queries[].state.data.address.coords —
 # rather than hard-code that path, we walk the JSON for any object shaped
 # like {lat: number, lon: number}.
-EXTRACT_YAD2_COORDS_JS = r"""
+# Walks the search-results page __NEXT_DATA__ for every listing and returns
+# a token -> {lat, lon} map. This lets us skip per-listing detail fetches
+# entirely (which were both slow and risky — Yad2 anti-bot kicks in after a
+# handful of hits).
+EXTRACT_YAD2_COORDS_MAP_JS = r"""
 (function() {
     var s = document.getElementById('__NEXT_DATA__');
-    if (!s) return JSON.stringify({error: 'no __NEXT_DATA__'});
+    if (!s) return JSON.stringify({error: 'no __NEXT_DATA__', map: {}});
     var data;
     try { data = JSON.parse(s.textContent); }
-    catch(e) { return JSON.stringify({error: 'parse failed'}); }
+    catch(e) { return JSON.stringify({error: 'parse failed', map: {}}); }
 
-    function find(obj, depth) {
-        if (!obj || typeof obj !== 'object' || depth > 30) return null;
-        if (typeof obj.lat === 'number' && typeof obj.lon === 'number'
-            && obj.lat > 29 && obj.lat < 34 && obj.lon > 33 && obj.lon < 36) {
-            return {lat: obj.lat, lon: obj.lon};
+    var out = {};
+    function walk(obj, depth) {
+        if (!obj || typeof obj !== 'object' || depth > 30) return;
+        if (Array.isArray(obj)) {
+            for (var i = 0; i < obj.length; i++) walk(obj[i], depth + 1);
+            return;
         }
-        for (var k in obj) {
-            if (!obj.hasOwnProperty(k)) continue;
-            var v = obj[k];
-            if (v && typeof v === 'object') {
-                var r = find(v, depth + 1);
-                if (r) return r;
+        // Listing-shaped object: has a token + address with coords
+        if (obj.token && obj.address && obj.address.coords) {
+            var c = obj.address.coords;
+            if (typeof c.lat === 'number' && typeof c.lon === 'number') {
+                out[obj.token] = {lat: c.lat, lon: c.lon};
             }
         }
-        return null;
+        for (var k in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, k)) walk(obj[k], depth + 1);
+        }
     }
-
-    var coords = find(data, 0);
-    if (coords) return JSON.stringify(coords);
-    return JSON.stringify({error: 'coords not found'});
+    walk(data, 0);
+    return JSON.stringify({map: out, count: Object.keys(out).length});
 })();
 """
 
@@ -310,8 +314,34 @@ def scrape_yad2_search(url: str) -> list[dict]:
                     f"URL: <{url}|search page>"
                 ),
             )
-        else:
-            logger.info("Yad2: extracted %d cards from %s", len(listings), url)
+            return listings
+
+        logger.info("Yad2: extracted %d cards from %s", len(listings), url)
+
+        # Pull coords for every listing from __NEXT_DATA__ on the same page —
+        # much faster (and safer for anti-bot) than opening each detail page.
+        coords_raw = _exec_js(tab, EXTRACT_YAD2_COORDS_MAP_JS)
+        coords_map: dict[str, dict] = {}
+        if coords_raw:
+            try:
+                coords_payload = json.loads(coords_raw)
+                coords_map = coords_payload.get("map", {}) or {}
+            except json.JSONDecodeError:
+                logger.warning("Yad2: failed to parse __NEXT_DATA__ coords for %s", url)
+        logger.info(
+            "Yad2: coords from __NEXT_DATA__ for %d of %d listings",
+            sum(1 for l in listings if l.get("token") in coords_map),
+            len(listings),
+        )
+
+        # Attach lat/lon to each card so yad2_cards_to_listings doesn't have
+        # to fetch detail pages.
+        for l in listings:
+            tok = l.get("token")
+            c = coords_map.get(tok) if tok else None
+            if c:
+                l["lat"] = c.get("lat")
+                l["lon"] = c.get("lon")
 
         return listings
 
@@ -376,15 +406,15 @@ def yad2_cards_to_listings(
     Convert raw Yad2 cards into ApartmentListing objects, applying:
       1. Recommendations filter ("similar properties" cards are dropped)
       2. Price/rooms hard filters (defensive — URL should pre-filter)
-      3. Geographic point-in-polygon filter via the listing detail page
+      3. Polygon filter using coords embedded in each card (from __NEXT_DATA__)
 
-    Setting fetch_coords=False skips the per-listing coordinate fetch and
-    the polygon check — used in --bootstrap mode where we just want to
-    mark everything as seen quickly.
+    Coords now come inline with the card (added by scrape_yad2_search via
+    __NEXT_DATA__) — no more per-listing detail page fetches. Setting
+    fetch_coords=False skips the polygon check — used in --bootstrap mode
+    where we just want to mark everything as seen quickly.
     """
     results: list[ApartmentListing] = []
-    coord_attempts = 0
-    coord_failures = 0
+    missing_coords = 0
 
     for card in cards:
         text = card.get("text", "")
@@ -407,7 +437,7 @@ def yad2_cards_to_listings(
             sqm=parsed["sqm"],
             bathrooms=None,
             location_name=parsed["location_name"],
-            in_target_area=True,  # URL bBox + neighborhood already enforce this
+            in_target_area=True,
             has_mamad=None,
             has_parking=None,
             is_sublet=False,
@@ -432,30 +462,27 @@ def yad2_cards_to_listings(
             )
             continue
 
-        # Geographic filter — open the detail page to get exact coordinates,
-        # then check the inclusion polygon. Skipped in bootstrap mode.
+        # Polygon filter using inline coords from __NEXT_DATA__.
         if fetch_coords:
-            coord_attempts += 1
-            coords = fetch_listing_coords(card.get("url", ""))
-            if coords is None:
-                coord_failures += 1
+            lat = card.get("lat")
+            lon = card.get("lon")
+            if lat is None or lon is None:
+                missing_coords += 1
                 logger.warning(
-                    "Yad2: dropping %s — could not fetch coordinates",
+                    "Yad2: dropping %s — no coords in search-results __NEXT_DATA__",
                     card.get("token"),
                 )
                 continue
-            lat, lon = coords
             if not is_in_target_area(lat, lon):
                 logger.info(
                     "Yad2: dropping %s — outside polygon (%.6f, %.6f)",
                     card.get("token"), lat, lon,
                 )
                 continue
-            logger.info(
+            logger.debug(
                 "Yad2: %s passed polygon (%.6f, %.6f)",
                 card.get("token"), lat, lon,
             )
-            time.sleep(1.5)  # gentle pacing between detail-page hits
 
         # Highlights
         if listing.price <= CRITERIA["ideal_max_rent"]:
@@ -473,18 +500,15 @@ def yad2_cards_to_listings(
 
     logger.info("Yad2: %d cards → %d listings after filter", len(cards), len(results))
 
-    # Alert if coordinate fetches are failing at a meaningful rate.
-    # Threshold: at least 3 failures AND at least 50% failure rate.
-    # The double condition avoids spurious alerts when only 1-2 listings exist.
-    if coord_attempts >= 3 and coord_failures >= 3 and coord_failures * 2 >= coord_attempts:
+    if missing_coords >= 3 and missing_coords * 2 >= len(cards):
         send_alert(
             key="yad2_coord_failures",
-            title="Yad2 coord lookups failing",
+            title="Yad2 coords missing from search results",
             body=(
-                f"{coord_failures}/{coord_attempts} new Yad2 listings were dropped "
-                "because their detail pages couldn't be parsed for lat/lng. "
-                "Likely causes: detail-page captcha, schema change, or rate limiting. "
-                "Check `monitor.log` for details."
+                f"{missing_coords}/{len(cards)} listings had no lat/lon in the "
+                "search-results __NEXT_DATA__. Yad2 may have changed the page "
+                "structure — `EXTRACT_YAD2_COORDS_MAP_JS` in `yad2_scraper.py` "
+                "may need updating."
             ),
         )
 
