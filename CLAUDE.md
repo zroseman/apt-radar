@@ -132,24 +132,24 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:$PORT/"
 
 Should print 200. Tail `dashboard_stdout.log` if not.
 
-### Step 7 — Bootstrap or fresh first scan?
+### Step 7 — Skip the backlog, or see everything?
 
-Before running the first scan, ask:
+Before running the first scan, ask the user **in plain language** — don't use the word "bootstrap" or other jargon. Something like:
 
-> "Quick question on what you want to see. If you've been browsing Yad2 yourself recently, you've probably already seen everything currently listed in your search area. Two options:
+> "One choice before I run the first search. If you've been looking at Yad2 yourself recently, you've probably already seen everything listed in your search area right now. Two options:
 >
-> **(a) Bootstrap mode (recommended)** — I mark all currently-listed apartments as 'already seen' without showing them to you. The next scan (and every one after) only surfaces brand-new listings. This avoids overwhelming you with 50-100 listings you've already scrolled past.
+> **(a)** Skip what's already up there. I'll mark all current listings as 'seen', and only show you brand-new ones starting from tomorrow's scan. Most people pick this — keeps your dashboard from getting flooded with 50-100 listings you've already scrolled past.
 >
-> **(b) Full first scan** — I show you everything currently matching your criteria. Could be 50-100 listings in your Pending tab to triage.
+> **(b)** Show me everything right now. I'll dump all current matches into your Pending tab — could be 50-100 listings to triage.
 >
-> Most users pick (a). Which do you want?"
+> Which do you want?"
 
-If (a) — bootstrap:
+If (a) — skip the backlog:
 ```bash
 curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?bootstrap=1"
 ```
 
-If (b) — normal scan:
+If (b) — show everything:
 ```bash
 curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start"
 ```
@@ -159,8 +159,8 @@ Poll `GET /api/scan/status` every 10 seconds. When `running: false`, **read the 
 > "Done in N seconds. Yad2: scraped X listings, Y passed your criteria. Facebook: scraped P posts, Q passed."
 
 Add a follow-up sentence based on context:
-- Bootstrap mode: "Those listings are now tagged as 'already seen'. Future scans only show new ones."
-- Normal scan with hits: "Check the Pending tab — listings are waiting for triage."
+- (a) skip-the-backlog mode: "Those current listings are tagged as 'already seen'. From here on out, every scan only surfaces new ones."
+- (b) normal scan with hits: "Check the Pending tab — listings are waiting for triage."
 - Normal scan with 0 hits: "Nothing matched today. Check back tomorrow."
 
 Open the dashboard:
