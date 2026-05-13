@@ -17,7 +17,7 @@ import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from config import FACEBOOK_ENABLED, FACEBOOK_GROUPS, LOG_PATH, YAD2_SEARCH_URLS
+from config import FACEBOOK_ENABLED, FACEBOOK_GROUPS, LOG_PATH, SEARCH_CONFIG_ID, YAD2_SEARCH_URLS
 from chrome_scraper import scrape_all_groups
 from post_parser import parse_and_filter_posts
 from yad2_scraper import scrape_yad2_searches, yad2_cards_to_listings
@@ -70,6 +70,7 @@ def _process_matching(matching, source_label: str, dry_run: bool):
                 "highlights": m.highlights,
                 "fingerprint": fp,
                 "status": "pending",
+                "search_config_id": SEARCH_CONFIG_ID,
             })
         filtered.append(m)
     logger.info("[%s] After rejection filter: %d listings", source_label, len(filtered))

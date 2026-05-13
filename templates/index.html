@@ -314,6 +314,18 @@
 <div class="container">
   <div class="count-badge">{{ listings|length }} listing{{ 's' if listings|length != 1 }}</div>
 
+  {% if previous_count and not show_previous %}
+    <div style="background:#fff8e1;border-left:4px solid #f9a825;padding:0.6rem 0.85rem;border-radius:8px;margin-bottom:0.75rem;font-size:0.82rem;color:#5d4037;">
+      {{ previous_count }} {{ 'listing' if previous_count == 1 else 'listings' }} from a previous search configuration {{ 'is' if previous_count == 1 else 'are' }} hidden.
+      <a href="?show_previous=1" style="color:#1565c0;font-weight:600;text-decoration:none;margin-left:0.4rem;">Show them →</a>
+    </div>
+  {% elif show_previous %}
+    <div style="background:#e3f2fd;border-left:4px solid #1565c0;padding:0.6rem 0.85rem;border-radius:8px;margin-bottom:0.75rem;font-size:0.82rem;color:#0d47a1;">
+      Showing listings from all search configurations.
+      <a href="?" style="color:#1565c0;font-weight:600;text-decoration:none;margin-left:0.4rem;">Hide previous →</a>
+    </div>
+  {% endif %}
+
   {% if not listings %}
     <div class="empty-state">
       {% if current_tab == 'pending' %}

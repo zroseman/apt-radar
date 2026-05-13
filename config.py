@@ -22,6 +22,9 @@ FACEBOOK_ENABLED = bool(_s.get("facebook_enabled", False))
 YAD2_SEARCH_URLS = list(_s["yad2_search_urls"])
 INCLUSION_POLYGON = [tuple(p) for p in _s["polygon"]]
 TARGET_AREA_DESCRIPTION = str(_s.get("target_area_description") or "")
+# Search-config id is bumped on every settings change that touches criteria.
+# Listings are tagged with the config id active at the time of save.
+SEARCH_CONFIG_ID = int(_s.get("search_config_id", 1))
 
 # --- Apartment search criteria ---
 # Editable fields (max_rent, min_rent, ideal_max_rent, min_rooms, min_sqm,

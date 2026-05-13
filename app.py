@@ -27,22 +27,65 @@ from settings import (
 app = Flask(__name__)
 
 
+def _current_search_config_id() -> int:
+    """Read the current search config id fresh on each request — settings
+    may have been bumped via save_settings since process start."""
+    return int(load_settings().get("search_config_id", 1))
+
+
+def _listings_for_tab(status: str, include_previous: bool):
+    return get_listings(
+        status=status,
+        search_config_id=_current_search_config_id(),
+        include_previous=include_previous,
+    )
+
+
+def _previous_count(status: str) -> int:
+    """How many listings of this status are from an older search config?
+    Used to surface a 'show previous' banner on the dashboard."""
+    all_count = len(get_listings(status=status, include_previous=True))
+    current_count = len(get_listings(
+        status=status, search_config_id=_current_search_config_id(),
+        include_previous=False,
+    ))
+    return max(0, all_count - current_count)
+
+
 @app.route("/")
 def index():
-    listings = get_listings(status="pending")
-    return render_template("index.html", listings=listings, current_tab="pending")
+    show_previous = request.args.get("show_previous") == "1"
+    listings = _listings_for_tab("pending", show_previous)
+    return render_template(
+        "index.html",
+        listings=listings, current_tab="pending",
+        show_previous=show_previous,
+        previous_count=_previous_count("pending"),
+    )
 
 
 @app.route("/saved")
 def saved():
-    listings = get_listings(status="saved")
-    return render_template("index.html", listings=listings, current_tab="saved")
+    show_previous = request.args.get("show_previous") == "1"
+    listings = _listings_for_tab("saved", show_previous)
+    return render_template(
+        "index.html",
+        listings=listings, current_tab="saved",
+        show_previous=show_previous,
+        previous_count=_previous_count("saved"),
+    )
 
 
 @app.route("/rejected")
 def rejected():
-    listings = get_listings(status="rejected")
-    return render_template("index.html", listings=listings, current_tab="rejected")
+    show_previous = request.args.get("show_previous") == "1"
+    listings = _listings_for_tab("rejected", show_previous)
+    return render_template(
+        "index.html",
+        listings=listings, current_tab="rejected",
+        show_previous=show_previous,
+        previous_count=_previous_count("rejected"),
+    )
 
 
 @app.route("/api/listings/<int:listing_id>/save", methods=["POST"])

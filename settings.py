@@ -103,13 +103,44 @@ def load_settings() -> dict:
     return dict(DEFAULTS)
 
 
+# Settings fields that constitute the "search configuration" — when any of
+# these change, we bump search_config_id so listings get re-tagged and the
+# dashboard can hide pre-change results by default.
+_SEARCH_CONFIG_FIELDS = frozenset({
+    "yad2_search_urls",
+    "min_rent",
+    "max_rent",
+    "ideal_max_rent",
+    "min_rooms",
+    "min_sqm",
+    "min_bathrooms",
+    "sublet_ok",
+    "polygon",
+    "facebook_groups",
+    "facebook_enabled",
+    "target_area_description",
+})
+
+
 def save_settings(updates: dict) -> None:
     """
     Atomically merge `updates` into settings.json. Writes to a tmp file
     then renames so a crash mid-write can't corrupt the file.
+
+    Bumps `search_config_id` if any of the criteria fields actually changed,
+    so the dashboard can tag listings by config and hide pre-change ones.
     """
     current = load_settings()
+    bump_config = False
+    for k, v in updates.items():
+        if k in _SEARCH_CONFIG_FIELDS and current.get(k) != v:
+            bump_config = True
+            break
     current.update(updates)
+    if bump_config:
+        current["search_config_id"] = int(current.get("search_config_id", 0)) + 1
+        logger.info("Search config changed — bumped search_config_id to %d",
+                    current["search_config_id"])
     tmp = SETTINGS_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False))
     tmp.replace(SETTINGS_PATH)

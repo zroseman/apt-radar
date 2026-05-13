@@ -57,6 +57,12 @@ def _get_connection() -> sqlite3.Connection:
             rejected_at TEXT
         )
     """)
+    # Lightweight migration: add search_config_id column to listings if it
+    # doesn't already exist. SQLite raises if the column already exists.
+    try:
+        conn.execute("ALTER TABLE listings ADD COLUMN search_config_id INTEGER")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 
@@ -182,7 +188,12 @@ def compute_fingerprint(listing) -> str:
 
 
 def save_listing(listing_data: dict) -> int:
-    """Insert a new listing into the listings table. Returns the new row id."""
+    """Insert a new listing into the listings table. Returns the new row id.
+
+    search_config_id is read from listing_data — caller should populate it
+    from config.SEARCH_CONFIG_ID so listings are tagged with the active
+    search config at the time of scrape.
+    """
     conn = _get_connection()
     now = datetime.utcnow().isoformat()
     try:
@@ -191,8 +202,8 @@ def save_listing(listing_data: dict) -> int:
                (post_id, group_url, permalink, raw_text, price, rooms, sqm,
                 bathrooms, location_name, in_target_area, has_mamad, has_parking,
                 is_sublet, summary, highlights, status, fingerprint,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                search_config_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 listing_data.get("post_id"),
                 listing_data.get("group_url"),
@@ -211,6 +222,7 @@ def save_listing(listing_data: dict) -> int:
                 json.dumps(listing_data.get("highlights", []), ensure_ascii=False),
                 listing_data.get("status", "pending"),
                 listing_data.get("fingerprint"),
+                listing_data.get("search_config_id"),
                 now,
                 now,
             ),
@@ -221,19 +233,33 @@ def save_listing(listing_data: dict) -> int:
         conn.close()
 
 
-def get_listings(status: str | None = None) -> list[dict]:
-    """Get listings, optionally filtered by status. Returns list of dicts."""
+def get_listings(
+    status: str | None = None,
+    search_config_id: int | None = None,
+    include_previous: bool = False,
+) -> list[dict]:
+    """Get listings, optionally filtered by status and search-config.
+
+    If include_previous is False AND search_config_id is set, only listings
+    tagged with that config_id are returned. Set include_previous=True to
+    see everything regardless of config (used by the "show previous" toggle
+    on the dashboard).
+    """
     conn = _get_connection()
     try:
+        clauses = []
+        params: list = []
         if status:
-            rows = conn.execute(
-                "SELECT * FROM listings WHERE status = ? ORDER BY created_at DESC",
-                (status,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM listings ORDER BY created_at DESC"
-            ).fetchall()
+            clauses.append("status = ?")
+            params.append(status)
+        if not include_previous and search_config_id is not None:
+            clauses.append("(search_config_id = ? OR search_config_id IS NULL)")
+            params.append(search_config_id)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM listings {where} ORDER BY created_at DESC",
+            params,
+        ).fetchall()
         result = []
         for row in rows:
             d = dict(row)
