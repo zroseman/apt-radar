@@ -128,24 +128,27 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
     all_posts = scrape_all_groups(FACEBOOK_GROUPS, seen_ids=seen_fb_ids)
     logger.info("Total posts scraped: %d", len(all_posts))
 
+    stats = {"scraped": len(all_posts), "passed_filter": 0}
+
     if not all_posts:
         logger.warning("No FB posts scraped. Check Chrome and Facebook login.")
-        return
+        return stats
 
     if bootstrap:
         mark_posts_seen(all_posts)
         logger.info("[BOOTSTRAP] Marked %d FB posts as seen, no notifications sent", len(all_posts))
-        return
+        return stats
 
     new_posts = filter_new_posts(all_posts)
     logger.info("New (unseen) FB posts: %d", len(new_posts))
 
     if not new_posts:
         logger.info("No new FB posts since last scan.")
-        return
+        return stats
 
     matching = parse_and_filter_posts(new_posts)
     logger.info("FB posts matching criteria: %d", len(matching))
+    stats["passed_filter"] = len(matching)
 
     # Mark ALL new posts as seen (whether they matched or not),
     # but never on dry runs — those should leave no DB residue
@@ -153,6 +156,7 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
         mark_posts_seen(new_posts)
 
     _process_matching(matching, source_label="facebook", dry_run=dry_run)
+    return stats
 
 
 def run_yad2_scan(dry_run: bool = False, bootstrap: bool = False):
@@ -167,14 +171,14 @@ def run_yad2_scan(dry_run: bool = False, bootstrap: bool = False):
         return
 
     logger.info("Scraping %d Yad2 search URLs...", len(YAD2_SEARCH_URLS))
-    # Pass already-seen IDs so each URL's pagination stops early once we
-    # catch up to listings we've already processed.
     seen_yad2_ids = get_all_seen_ids()
     cards = scrape_yad2_searches(YAD2_SEARCH_URLS, seen_ids=seen_yad2_ids)
     logger.info("Total Yad2 cards: %d", len(cards))
 
+    stats = {"scraped": len(cards), "passed_filter": 0}
+
     if not cards:
-        return
+        return stats
 
     pseudo_posts = [
         {"id": c.get("id", ""), "group_url": "yad2", "permalink": c.get("url", "")}
@@ -185,61 +189,96 @@ def run_yad2_scan(dry_run: bool = False, bootstrap: bool = False):
     if bootstrap:
         mark_posts_seen(pseudo_posts)
         logger.info("[BOOTSTRAP] Marked %d Yad2 cards as seen, no notifications sent", len(pseudo_posts))
-        return
+        return stats
 
     new_pseudo = filter_new_posts(pseudo_posts)
     logger.info("New (unseen) Yad2 cards: %d", len(new_pseudo))
 
     if not new_pseudo:
-        return
+        return stats
 
     new_ids = {p["id"] for p in new_pseudo}
     new_cards = [c for c in cards if c.get("id") in new_ids]
 
     matching = yad2_cards_to_listings(new_cards, fetch_coords=True)
+    stats["passed_filter"] = len(matching)
 
-    # Mark ALL new Yad2 cards as seen (so we don't reprocess them next run
-    # even if parsing dropped them) — but never on dry runs
     if not dry_run:
         mark_posts_seen(new_pseudo)
 
     _process_matching(matching, source_label="yad2", dry_run=dry_run)
+    return stats
+
+
+def _write_scan_summary(summary: dict) -> None:
+    """Persist last-scan stats to .last_scan.json so the dashboard / wizard
+    can show what happened ("found N, M passed filter") without grepping the log."""
+    try:
+        from config import PROJECT_DIR
+        path = PROJECT_DIR / ".last_scan.json"
+        import json as _json
+        path.write_text(_json.dumps(summary, indent=2, default=str))
+    except Exception:
+        logger.exception("Failed to write .last_scan.json")
 
 
 def run_scan(dry_run: bool = False, bootstrap: bool = False):
-    """Execute one full scan: Facebook groups + Yad2 searches."""
+    """Execute one full scan: Yad2 searches + (optional) Facebook groups.
+
+    bootstrap=True: marks everything as seen without notifying or saving to
+    listings table. Use on first install to skip the backlog so the user
+    only sees genuinely-new listings going forward.
+    """
     start = datetime.now()
     mode = "BOOTSTRAP" if bootstrap else ("DRY RUN" if dry_run else "LIVE")
     logger.info("=== Starting apartment scan at %s [%s] ===", start.isoformat(), mode)
 
     reset_alerts()
 
+    summary: dict = {
+        "started_at": start.isoformat(),
+        "mode": mode,
+        "bootstrap": bootstrap,
+        "errors": [],
+        "yad2": {"scraped": 0, "passed_filter": 0, "skipped": False},
+        "facebook": {"scraped": 0, "passed_filter": 0, "skipped": False},
+    }
+
     # Both scrapers go through the user's logged-in Chrome via CDP. If that
-    # Chrome isn't running, log a clear message and skip — silent empty scans
-    # are the most common confusing failure mode for friends.
+    # Chrome isn't running, log a clear message and skip.
     if not _cdp_reachable():
-        logger.warning(
-            "Chrome debug port 9222 not reachable — both Yad2 and Facebook "
-            "scrapes will be skipped. Run ./start_chrome_debug.sh, log into "
-            "Yad2 (and Facebook if enabled), then try again."
-        )
+        msg = "Chrome debug port 9222 not reachable — both scrapes skipped."
+        logger.warning(msg)
+        summary["errors"].append(msg)
+        summary["yad2"]["skipped"] = True
+        summary["facebook"]["skipped"] = True
         elapsed = (datetime.now() - start).total_seconds()
-        logger.info("=== Scan aborted in %.1f seconds (Chrome debug unreachable) ===", elapsed)
+        summary["completed_at"] = datetime.now().isoformat()
+        summary["duration_seconds"] = round(elapsed, 1)
+        logger.info("=== Scan aborted in %.1fs (Chrome debug unreachable) ===", elapsed)
+        _write_scan_summary(summary)
         return
 
     # Yad2 first (fast, always reliable). Facebook second (slow, opt-in).
     try:
-        run_yad2_scan(dry_run=dry_run, bootstrap=bootstrap)
-    except Exception:
+        yad2_stats = run_yad2_scan(dry_run=dry_run, bootstrap=bootstrap) or {}
+        summary["yad2"].update(yad2_stats)
+    except Exception as e:
         logger.exception("Yad2 scan failed")
+        summary["errors"].append(f"yad2: {e}")
 
     try:
-        run_facebook_scan(dry_run=dry_run, bootstrap=bootstrap)
-    except Exception:
+        fb_stats = run_facebook_scan(dry_run=dry_run, bootstrap=bootstrap) or {}
+        summary["facebook"].update(fb_stats)
+    except Exception as e:
         logger.exception("Facebook scan failed")
+        summary["errors"].append(f"facebook: {e}")
 
     elapsed = (datetime.now() - start).total_seconds()
+    summary["completed_at"] = datetime.now().isoformat()
+    summary["duration_seconds"] = round(elapsed, 1)
     logger.info("=== Scan completed in %.1f seconds ===", elapsed)
+    _write_scan_summary(summary)
 
 
 def show_stats():

@@ -106,18 +106,19 @@ def load_settings() -> dict:
 # Settings fields that constitute the "search configuration" — when any of
 # these change, we bump search_config_id so listings get re-tagged and the
 # dashboard can hide pre-change results by default.
+#
+# Deliberately NARROW set. Only fields that change *what counts as a match*
+# bump the config id. Adding a new source (facebook_groups) or toggling FB
+# on/off doesn't invalidate previous Yad2 results; ideal_max_rent is a soft
+# preference, not a hard filter; and polygon is unused for filtering today.
 _SEARCH_CONFIG_FIELDS = frozenset({
     "yad2_search_urls",
     "min_rent",
     "max_rent",
-    "ideal_max_rent",
     "min_rooms",
     "min_sqm",
     "min_bathrooms",
     "sublet_ok",
-    "polygon",
-    "facebook_groups",
-    "facebook_enabled",
     "target_area_description",
 })
 

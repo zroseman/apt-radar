@@ -147,29 +147,48 @@ def api_scan_start():
     if _scan_pid():
         return jsonify({"ok": False, "error": "Scan already running"}), 409
     env = {**os.environ, "TLV_APT_FOREGROUND": "1"}
-    # Pre-claim the PID file so a parallel start request sees us as running
-    # before Popen returns. Race-tightening, not a true lock.
+    # Bootstrap mode marks everything as seen without surfacing — used on
+    # first install so the user only sees genuinely-new listings going forward.
+    bootstrap = (request.args.get("bootstrap") == "1") or (
+        request.form.get("bootstrap") == "1"
+    )
+    args = [str(SCRIPT_DIR / "run_monitor.sh")]
+    if bootstrap:
+        args.append("--bootstrap")
     SCAN_PID_FILE.write_text("starting")
     try:
         proc = subprocess.Popen(
-            [str(SCRIPT_DIR / "run_monitor.sh")],
-            cwd=str(SCRIPT_DIR),
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            args, cwd=str(SCRIPT_DIR), env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
         SCAN_PID_FILE.write_text(str(proc.pid))
-        return jsonify({"ok": True, "pid": proc.pid})
+        return jsonify({"ok": True, "pid": proc.pid, "bootstrap": bootstrap})
     except Exception as e:
         SCAN_PID_FILE.unlink(missing_ok=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _read_last_scan_summary() -> dict | None:
+    """Read .last_scan.json (written by monitor.py at end of each scan).
+    Wizard polls this to report scan results back to the user in chat."""
+    path = SCRIPT_DIR / ".last_scan.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
 @app.route("/api/scan/status")
 def api_scan_status():
     pid = _scan_pid()
-    return jsonify({"running": pid is not None, "pid": pid})
+    return jsonify({
+        "running": pid is not None,
+        "pid": pid,
+        "last_scan": _read_last_scan_summary(),
+    })
 
 
 # --- Settings page ---

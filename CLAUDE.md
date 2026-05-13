@@ -132,25 +132,49 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:$PORT/"
 
 Should print 200. Tail `dashboard_stdout.log` if not.
 
-### Step 7 — Run the first scan
+### Step 7 — Bootstrap or fresh first scan?
 
-Tell the user:
+Before running the first scan, ask:
 
-> "I have everything I need. Running your first Yad2 scan now — give me ~2 minutes. The dashboard will open in your browser when it's done."
+> "Quick question on what you want to see. If you've been browsing Yad2 yourself recently, you've probably already seen everything currently listed in your search area. Two options:
+>
+> **(a) Bootstrap mode (recommended)** — I mark all currently-listed apartments as 'already seen' without showing them to you. The next scan (and every one after) only surfaces brand-new listings. This avoids overwhelming you with 50-100 listings you've already scrolled past.
+>
+> **(b) Full first scan** — I show you everything currently matching your criteria. Could be 50-100 listings in your Pending tab to triage.
+>
+> Most users pick (a). Which do you want?"
 
-Trigger via the dashboard's API:
+If (a) — bootstrap:
+```bash
+curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?bootstrap=1"
+```
 
+If (b) — normal scan:
 ```bash
 curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start"
 ```
 
-Poll `GET /api/scan/status` every 10 seconds. When `running: false`, open the dashboard:
+Poll `GET /api/scan/status` every 10 seconds. When `running: false`, **read the `last_scan` field** and report results to the user in plain language:
 
+> "Done in N seconds. Yad2: scraped X listings, Y passed your criteria. Facebook: scraped P posts, Q passed."
+
+Add a follow-up sentence based on context:
+- Bootstrap mode: "Those listings are now tagged as 'already seen'. Future scans only show new ones."
+- Normal scan with hits: "Check the Pending tab — listings are waiting for triage."
+- Normal scan with 0 hits: "Nothing matched today. Check back tomorrow."
+
+Open the dashboard:
 ```bash
 open "http://localhost:$PORT/"
 ```
 
-Tell them: "Done. The Pending tab shows any matches we found. Let me know if you have any issues."
+### Step 7b — Re-run after Facebook is enabled (if applicable)
+
+If you go on to Step 9 and add Facebook, **trigger another scan** so the user actually sees FB results. The first scan (above) ran Yad2 only. After enabling FB, ask:
+
+> "Want me to run another scan now that Facebook is set up? (recommended — otherwise you'd wait until tomorrow to see FB results)"
+
+If yes: same as Step 7, normal scan (not bootstrap). Read `last_scan` from status, report counts.
 
 ### Step 8 — Schedule (optional)
 

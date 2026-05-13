@@ -74,8 +74,12 @@ For LOCATION, decide whether the post's location matches the user's target area:
 {target_area}
 --- END TARGET AREA ---
 
-If the post mentions a specific street, neighborhood, or address, match it against the area description above.
-If the post's location is unclear or unmentioned, set in_target_area to null (so it can be reviewed manually).
+Matching rules:
+- If the post explicitly names a neighborhood that's IN the target area (e.g., "Old North", "Florentin", "Bavli"), that's a match — even if no specific street is mentioned.
+- If the post names a street, use your general knowledge of the city to determine which neighborhood it's in. Match if the neighborhood is in-target. Don't require the exact street to be listed in the user's area description; the description is a guide, not an exhaustive whitelist.
+- If the post explicitly names a neighborhood that's OUT of the target area, that's a no-match.
+- If the post mentions an address or street with no obvious neighborhood association, set in_target_area to null (ambiguous — surfaces it for manual review rather than silently dropping it).
+- If no location information is given at all, set in_target_area to null.
 
 For PRICE, look for:
 - Numbers near ₪, ש"ח, שח, שקל, NIS
