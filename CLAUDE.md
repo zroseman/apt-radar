@@ -205,9 +205,10 @@ Tell them:
 
 ## Yad2 notes
 
-- **Login first** — Yad2 throttles anonymous traffic and may serve captchas. If a user reports empty scrapes on Yad2-only path, the fix is to log into Yad2 in their regular Chrome (cookies persist; the scraper sees them).
-- **Polygon → bBox URL** — if the user has a polygon but no Yad2 URLs, the settings save handler auto-generates one Yad2 URL with the polygon's bBox. They can override by pasting their own URLs.
+- **Login first** — Yad2 throttles anonymous traffic and may serve captchas (ShieldSquare/Imperva). If a user reports empty scrapes on Yad2-only path, the fix is to log into Yad2 in the debug Chrome (cookies persist; the scraper sees them).
+- **Polygon → bBox URL** — the settings page has an "Apply this polygon to Yad2 URLs" button. If the user has a polygon but no Yad2 URLs, the save handler also auto-generates one Yad2 URL with the polygon's bBox.
 - **URL param rewriting** — `update_yad2_urls()` rewrites `minPrice`, `maxPrice`, `minRooms` on existing URLs while preserving `bBox`/`neighborhood`/`city`/`area`. So changing criteria in the UI keeps the user's chosen geographic search intact.
+- **Yad2 URL canonicalization (confusing but harmless)** — when you open `https://www.yad2.co.il/realestate/rent?bBox=...` for a bBox that's inside Tel Aviv, Yad2's server redirects to `https://www.yad2.co.il/realestate/rent/tel-aviv-area?bBox=...`. The bBox query param survives the redirect, so the listings are still filtered correctly. If a user complains "I see the polygon coords in the URL but the scrape went to `/tel-aviv-area`" — they're right that the address bar shows `/tel-aviv-area`, but the bBox is still in effect. Verify with `grep "Yad2: extracted" monitor.log` — the card count should be reasonable for the polygon area.
 
 ## Architecture (for ongoing development)
 
