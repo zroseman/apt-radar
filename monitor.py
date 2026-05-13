@@ -21,7 +21,7 @@ from config import FACEBOOK_ENABLED, FACEBOOK_GROUPS, LOG_PATH, YAD2_SEARCH_URLS
 from chrome_scraper import scrape_all_groups
 from post_parser import parse_and_filter_posts
 from yad2_scraper import scrape_yad2_searches, yad2_cards_to_listings
-from db import filter_new_posts, mark_posts_seen, mark_seen, get_stats, compute_fingerprint, is_fingerprint_rejected, save_listing
+from db import filter_new_posts, mark_posts_seen, mark_seen, get_stats, compute_fingerprint, is_fingerprint_rejected, save_listing, get_all_seen_ids
 from slack_notifier import send_listings, reset_alerts
 
 # Set up logging — rotate to keep monitor.log from growing unbounded.
@@ -121,7 +121,10 @@ def run_facebook_scan(dry_run: bool = False, bootstrap: bool = False):
         return
 
     logger.info("Scraping %d Facebook groups...", len(FACEBOOK_GROUPS))
-    all_posts = scrape_all_groups(FACEBOOK_GROUPS)
+    # Pass the set of already-seen post IDs so each group's scroll loop
+    # can short-circuit once we're seeing only stale content.
+    seen_fb_ids = get_all_seen_ids()
+    all_posts = scrape_all_groups(FACEBOOK_GROUPS, seen_ids=seen_fb_ids)
     logger.info("Total posts scraped: %d", len(all_posts))
 
     if not all_posts:

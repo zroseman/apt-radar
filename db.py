@@ -87,6 +87,24 @@ def mark_seen(post_id: str, group_url: str, notified: bool = False):
         conn.close()
 
 
+def get_all_seen_ids(group_url: str | None = None) -> set[str]:
+    """Return the set of post IDs already in seen_posts. Optionally restricted
+    to a single group_url. Used to short-circuit scraping when a scroll has
+    only already-seen posts."""
+    conn = _get_connection()
+    try:
+        if group_url:
+            cur = conn.execute(
+                "SELECT post_id FROM seen_posts WHERE group_url = ?",
+                (group_url,),
+            )
+        else:
+            cur = conn.execute("SELECT post_id FROM seen_posts")
+        return {row[0] for row in cur.fetchall()}
+    finally:
+        conn.close()
+
+
 def filter_new_posts(posts: list[dict]) -> list[dict]:
     """Return only posts that haven't been seen before."""
     new_posts = []

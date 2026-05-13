@@ -353,11 +353,21 @@ def _clean_post_text(text: str) -> str:
     return "\n".join(cleaned)
 
 
-def scrape_group(group_url: str) -> list[dict]:
+def scrape_group(
+    group_url: str,
+    seen_ids: set[str] | None = None,
+    max_consecutive_zero_new_scrolls: int = 2,
+) -> list[dict]:
     """
     Scrape recent posts from a Facebook group.
-    Returns a list of dicts with keys: id, text, permalink, group_url
+    Returns a list of dicts with keys: id, text, permalink, group_url.
+
+    Short-circuit: if `seen_ids` is provided, the scroll loop stops early
+    when `max_consecutive_zero_new_scrolls` scrolls in a row reveal only
+    posts we've already processed. Saves time + avoids unnecessary FB load.
     """
+    seen_ids = seen_ids or set()
+
     tab = _open_tab(group_url)
     if not tab or tab.get("client") is None:
         logger.error("Could not open CDP tab for %s", group_url)
@@ -369,29 +379,52 @@ def scrape_group(group_url: str) -> list[dict]:
         time.sleep(PAGE_LOAD_DELAY)
         _wait_for_load(tab)
 
-        all_posts = {}
+        all_posts: dict = {}
+        zero_new_streak = 0
 
         for scroll_i in range(SCROLL_COUNT + 1):
             _exec_js(tab, EXPAND_SEE_MORE_JS)
             time.sleep(0.5)
 
+            new_this_scroll = 0
             raw = _exec_js(tab, EXTRACT_VISIBLE_POSTS_JS)
             if raw:
                 try:
                     batch = json.loads(raw)
                     for p in batch:
                         pid = p.get("id", "")
-                        if pid and pid not in all_posts:
-                            all_posts[pid] = p
+                        if not pid or pid in all_posts:
+                            continue
+                        all_posts[pid] = p
+                        # Was this post already in the seen database?
+                        if pid not in seen_ids:
+                            new_this_scroll += 1
                 except json.JSONDecodeError:
                     logger.debug("JSON parse error on scroll %d", scroll_i)
 
+            if new_this_scroll == 0:
+                zero_new_streak += 1
+                logger.debug(
+                    "Scroll %d/%d for %s — 0 new (streak=%d/%d)",
+                    scroll_i + 1, SCROLL_COUNT, group_url,
+                    zero_new_streak, max_consecutive_zero_new_scrolls,
+                )
+                if zero_new_streak >= max_consecutive_zero_new_scrolls:
+                    logger.info(
+                        "Short-circuit: %s — %d scrolls in a row had no new posts; stopping",
+                        group_url, zero_new_streak,
+                    )
+                    break
+            else:
+                zero_new_streak = 0
+                logger.debug(
+                    "Scroll %d/%d for %s — %d new this scroll (total %d)",
+                    scroll_i + 1, SCROLL_COUNT, group_url,
+                    new_this_scroll, len(all_posts),
+                )
+
             _exec_js(tab, "window.scrollBy(0, window.innerHeight * 0.8);")
             time.sleep(SCROLL_DELAY)
-            logger.debug(
-                "Scroll %d/%d for %s — %d posts so far",
-                scroll_i + 1, SCROLL_COUNT, group_url, len(all_posts),
-            )
 
         posts = list(all_posts.values())
 
@@ -408,12 +441,19 @@ def scrape_group(group_url: str) -> list[dict]:
         _close_tab(tab)
 
 
-def scrape_all_groups(group_urls: list[str]) -> list[dict]:
-    """Scrape posts from all configured Facebook groups."""
+def scrape_all_groups(
+    group_urls: list[str],
+    seen_ids: set[str] | None = None,
+) -> list[dict]:
+    """Scrape posts from all configured Facebook groups.
+
+    If `seen_ids` is provided, each group's scroll loop short-circuits once
+    consecutive scrolls reveal only already-seen posts.
+    """
     all_posts = []
     for url in group_urls:
         try:
-            posts = scrape_group(url)
+            posts = scrape_group(url, seen_ids=seen_ids)
             all_posts.extend(posts)
         except Exception:
             logger.exception("Error scraping %s", url)
