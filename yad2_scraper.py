@@ -349,8 +349,12 @@ def _scrape_yad2_search_page(url: str, alert_on_empty: bool = True) -> list[dict
 
     `alert_on_empty=False` suppresses the "0 cards" Slack alert — useful when
     paginating, where end-of-results naturally returns an empty page.
+
+    force_background=True — Yad2 puts its listing data in __NEXT_DATA__ at
+    SSR time, so the tab doesn't need to actually render. Forces a background
+    tab even when TLV_APT_FOREGROUND=1 is set for the FB scrape.
     """
-    tab = _open_tab(url)
+    tab = _open_tab(url, force_background=True)
     if not tab or tab.get("client") is None:
         logger.error("Yad2: failed to open CDP tab for %s", url)
         return []

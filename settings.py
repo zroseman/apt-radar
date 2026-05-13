@@ -119,7 +119,11 @@ _SEARCH_CONFIG_FIELDS = frozenset({
     "min_sqm",
     "min_bathrooms",
     "sublet_ok",
-    "target_area_description",
+    # NOTE: target_area_description and facebook_* deliberately NOT here.
+    # They only affect Facebook classification; they don't invalidate existing
+    # Yad2 listings. Setting target_area_description for the first time (e.g.
+    # during FB onboarding) should not silently hide the Yad2 results the
+    # user just looked at.
 })
 
 

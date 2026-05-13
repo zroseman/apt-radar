@@ -94,13 +94,16 @@ def _get_browser_ws() -> str:
     return r.json()["webSocketDebuggerUrl"]
 
 
-def _open_tab(url: str) -> dict:
+def _open_tab(url: str, force_background: bool = False) -> dict:
     """
-    Open a new tab in the BACKGROUND. Returns {target_id, ws_url, client}.
+    Open a new tab. Returns {target_id, ws_url, client} or {} on failure.
 
-    background=True is what keeps Chrome from foregrounding its window on
-    every tab open — critical for not disrupting the user's workflow.
-    Returns {} on failure so callers can bail cleanly.
+    By default, foreground vs background is controlled by the
+    TLV_APT_FOREGROUND env var (FB requires foreground because its feed
+    virtualizes off-screen posts). Pass force_background=True from scrapers
+    that can read SSR-rendered data without the tab being visible (Yad2 is
+    the main one) — that way Yad2 scans don't disrupt the user's screen
+    even when FB is enabled.
     """
     try:
         browser_ws = _get_browser_ws()
@@ -112,9 +115,12 @@ def _open_tab(url: str) -> dict:
         )
         return {}
 
-    # Off-hours scheduled runs set TLV_APT_FOREGROUND=1 so Facebook actually
-    # renders posts. Manual runs leave it unset and stay background.
-    background = os.environ.get("TLV_APT_FOREGROUND") != "1"
+    if force_background:
+        background = True
+    else:
+        # TLV_APT_FOREGROUND=1 forces foreground (set by app.py and the
+        # scheduled launchd job). Otherwise default to background.
+        background = os.environ.get("TLV_APT_FOREGROUND") != "1"
     browser = CDPClient(browser_ws)
     try:
         result = browser.send(

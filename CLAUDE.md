@@ -177,11 +177,18 @@ open "http://localhost:$PORT/"
 
 ### Step 7b — Re-run after Facebook is enabled (if applicable)
 
-If you go on to Step 9 and add Facebook, **trigger another scan** so the user actually sees FB results. The first scan (above) ran Yad2 only. After enabling FB, ask:
+If you go on to Step 9 and add Facebook, **trigger another scan** so the user actually sees FB results. **Warn them about the Chrome foregrounding before kicking it off** — FB scraping has to bring Chrome to the front several times (the FB feed virtualizes off-screen posts, so the tab has to actually render). Yad2, by contrast, runs in the background and won't disrupt their screen.
 
-> "Want me to run another scan now that Facebook is set up? (recommended — otherwise you'd wait until tomorrow to see FB results)"
+Tell them:
+> "I'll run another scan now that Facebook is set up. Heads up: the Facebook part will bring Chrome to the front several times over ~5 minutes — you won't be able to use your screen comfortably during that. Yad2 runs silently in the background. When the FB section is done, the Chrome pop-ups stop. Ready?"
 
-If yes: same as Step 7, normal scan (not bootstrap). Read `last_scan` from status, report counts.
+When they say ready, use the SAME max_pages=1 cap as the first scan:
+
+```bash
+curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?max_pages=1"
+```
+
+Read `last_scan` from status, report counts in chat as usual.
 
 ### Step 8 — Schedule (optional)
 
