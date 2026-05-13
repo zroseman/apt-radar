@@ -141,6 +141,31 @@ def update_yad2_urls(urls: list[str], min_price: int, max_price: int, min_rooms:
     return [update_yad2_url(u, min_price, max_price, min_rooms) for u in urls]
 
 
+def bbox_from_yad2_url(url: str) -> tuple[float, float, float, float] | None:
+    """Extract `bBox=lat1,lng1,lat2,lng2` from a Yad2 search URL.
+
+    Returns (min_lat, min_lng, max_lat, max_lng) or None if the URL has no
+    bBox param or the value is malformed. This bBox is the user's actual
+    geographic intent — Yad2 puts it in the URL when the user zooms the map.
+    """
+    try:
+        qs = parse_qs(urlparse(url).query)
+        raw = qs.get("bBox", [None])[0]
+        if not raw:
+            return None
+        parts = raw.split(",")
+        if len(parts) != 4:
+            return None
+        nums = [float(p) for p in parts]
+        # Yad2's bBox format is lat1,lng1,lat2,lng2 — order of the two corners
+        # isn't fixed, so take min/max defensively.
+        lats = [nums[0], nums[2]]
+        lngs = [nums[1], nums[3]]
+        return min(lats), min(lngs), max(lats), max(lngs)
+    except (ValueError, IndexError):
+        return None
+
+
 def polygon_bbox(polygon: list[list[float]]) -> tuple[float, float, float, float]:
     """Compute the axis-aligned bounding box of a [lat, lng] polygon.
     Returns (min_lat, min_lng, max_lat, max_lng). Raises if empty."""

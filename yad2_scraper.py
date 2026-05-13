@@ -22,9 +22,10 @@ from chrome_scraper import (
     _open_tab,
     _wait_for_load,
 )
-from config import CRITERIA
+from config import CRITERIA, INCLUSION_POLYGON
 from geo_filter import is_in_target_area
 from post_parser import ApartmentListing
+from settings import bbox_from_yad2_url
 from slack_notifier import send_alert
 
 logger = logging.getLogger(__name__)
@@ -335,13 +336,25 @@ def scrape_yad2_search(url: str) -> list[dict]:
         )
 
         # Attach lat/lon to each card so yad2_cards_to_listings doesn't have
-        # to fetch detail pages.
+        # to fetch detail pages. Also tag each card with the bBox extracted
+        # from the source URL — used as an automatic geographic filter when
+        # the user hasn't drawn a custom polygon.
+        source_bbox = bbox_from_yad2_url(url)
+        if source_bbox:
+            logger.info(
+                "Yad2: source bBox = lat[%.4f, %.4f] lng[%.4f, %.4f]",
+                source_bbox[0], source_bbox[2], source_bbox[1], source_bbox[3],
+            )
+        else:
+            logger.info("Yad2: no bBox in URL %s — no auto geographic filter", url)
         for l in listings:
             tok = l.get("token")
             c = coords_map.get(tok) if tok else None
             if c:
                 l["lat"] = c.get("lat")
                 l["lon"] = c.get("lon")
+            if source_bbox:
+                l["source_bbox"] = source_bbox
 
         return listings
 
@@ -462,7 +475,11 @@ def yad2_cards_to_listings(
             )
             continue
 
-        # Polygon filter using inline coords from __NEXT_DATA__.
+        # Geographic filter using inline coords from __NEXT_DATA__.
+        # Priority:
+        #   1. User polygon (strict, custom shape) if set in settings
+        #   2. bBox from the user's Yad2 URL (auto-derived rectangle)
+        #   3. No filter (everything passes)
         if fetch_coords:
             lat = card.get("lat")
             lon = card.get("lon")
@@ -473,16 +490,35 @@ def yad2_cards_to_listings(
                     card.get("token"),
                 )
                 continue
-            if not is_in_target_area(lat, lon):
-                logger.info(
-                    "Yad2: dropping %s — outside polygon (%.6f, %.6f)",
-                    card.get("token"), lat, lon,
-                )
-                continue
-            logger.debug(
-                "Yad2: %s passed polygon (%.6f, %.6f)",
-                card.get("token"), lat, lon,
-            )
+
+            if INCLUSION_POLYGON:
+                # User has a custom polygon — that's the filter.
+                if not is_in_target_area(lat, lon):
+                    logger.info(
+                        "Yad2: dropping %s — outside polygon (%.6f, %.6f)",
+                        card.get("token"), lat, lon,
+                    )
+                    continue
+                logger.debug("Yad2: %s passed polygon (%.6f, %.6f)",
+                             card.get("token"), lat, lon)
+            else:
+                # Fall back to the bBox from the source URL.
+                source_bbox = card.get("source_bbox")
+                if source_bbox:
+                    min_lat, min_lng, max_lat, max_lng = source_bbox
+                    if not (min_lat <= lat <= max_lat and min_lng <= lon <= max_lng):
+                        logger.info(
+                            "Yad2: dropping %s — outside source-URL bBox (%.6f, %.6f)",
+                            card.get("token"), lat, lon,
+                        )
+                        continue
+                    logger.debug("Yad2: %s passed source bBox (%.6f, %.6f)",
+                                 card.get("token"), lat, lon)
+                else:
+                    # No polygon, no source bBox — surface everything that
+                    # passed the price/rooms filters.
+                    logger.debug("Yad2: %s — no geo filter applied (%.6f, %.6f)",
+                                 card.get("token"), lat, lon)
 
         # Highlights
         if listing.price <= CRITERIA["ideal_max_rent"]:
