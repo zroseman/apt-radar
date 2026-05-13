@@ -362,7 +362,7 @@ def _clean_post_text(text: str) -> str:
 def scrape_group(
     group_url: str,
     seen_ids: set[str] | None = None,
-    max_consecutive_zero_new_scrolls: int = 2,
+    max_consecutive_zero_new_scrolls: int = 3,
 ) -> list[dict]:
     """
     Scrape recent posts from a Facebook group.
