@@ -155,11 +155,24 @@ def api_scan_start():
     if _scan_pid():
         return jsonify({"ok": False, "error": "Scan already running"}), 409
     env = {**os.environ, "TLV_APT_FOREGROUND": "1"}
+
     # Bootstrap mode marks everything as seen without surfacing — used on
     # first install so the user only sees genuinely-new listings going forward.
     bootstrap = (request.args.get("bootstrap") == "1") or (
         request.form.get("bootstrap") == "1"
     )
+
+    # max_pages cap (used by the wizard on the first scan: ?max_pages=1
+    # keeps it to one Yad2 page so the user sees results in ~15s, not 80s).
+    max_pages_raw = request.args.get("max_pages") or request.form.get("max_pages")
+    if max_pages_raw:
+        try:
+            mp = int(max_pages_raw)
+            if 1 <= mp <= 20:
+                env["APT_RADAR_MAX_PAGES"] = str(mp)
+        except ValueError:
+            pass
+
     args = [str(SCRIPT_DIR / "run_monitor.sh")]
     if bootstrap:
         args.append("--bootstrap")
@@ -171,7 +184,10 @@ def api_scan_start():
             start_new_session=True,
         )
         SCAN_PID_FILE.write_text(str(proc.pid))
-        return jsonify({"ok": True, "pid": proc.pid, "bootstrap": bootstrap})
+        return jsonify({
+            "ok": True, "pid": proc.pid, "bootstrap": bootstrap,
+            "max_pages": env.get("APT_RADAR_MAX_PAGES"),
+        })
     except Exception as e:
         SCAN_PID_FILE.unlink(missing_ok=True)
         return jsonify({"ok": False, "error": str(e)}), 500

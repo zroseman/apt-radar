@@ -478,17 +478,25 @@ def scrape_yad2_searches(
     urls: list[str],
     seen_ids: set[str] | None = None,
     max_listings_per_url: int = 100,
+    max_pages_per_url: int = 10,
 ) -> list[dict]:
     """Scrape multiple Yad2 search URLs and return a deduplicated list of cards.
 
     seen_ids: pass db.get_all_seen_ids() so each URL's pagination can stop
     early when it catches up to already-scraped listings.
+
+    max_pages_per_url: cap on the number of Yad2 pages walked per URL. The
+    wizard sets this to 1 on the very first scan so the user isn't sitting
+    around for 80 seconds; later scans use the default 10.
     """
     by_token: dict[str, dict] = {}
     for url in urls:
         try:
             cards = scrape_yad2_search(
-                url, max_listings=max_listings_per_url, seen_ids=seen_ids,
+                url,
+                max_listings=max_listings_per_url,
+                max_pages=max_pages_per_url,
+                seen_ids=seen_ids,
             )
             for c in cards:
                 token = c.get("token")

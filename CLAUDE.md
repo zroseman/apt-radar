@@ -144,24 +144,31 @@ Before running the first scan, ask the user **in plain language** — don't use 
 >
 > Which do you want?"
 
+**Important: the first scan is intentionally shallow.** Append `?max_pages=1` to keep it to the first ~30 listings (~15 seconds). Later scans run the full ~100 listings across multiple pages. Tell the user this so they understand the result count isn't the full inventory.
+
 If (a) — skip the backlog:
 ```bash
-curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?bootstrap=1"
+curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?bootstrap=1&max_pages=1"
 ```
 
 If (b) — show everything:
 ```bash
-curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start"
+curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start?max_pages=1"
 ```
 
 Poll `GET /api/scan/status` every 10 seconds. When `running: false`, **read the `last_scan` field** and report results to the user in plain language:
 
-> "Done in N seconds. Yad2: scraped X listings, Y passed your criteria. Facebook: scraped P posts, Q passed."
+> "Done in N seconds. Yad2: scraped X listings (first page only — let me know if you want me to scan deeper), Y passed your criteria. Facebook: scraped P posts, Q passed."
 
 Add a follow-up sentence based on context:
 - (a) skip-the-backlog mode: "Those current listings are tagged as 'already seen'. From here on out, every scan only surfaces new ones."
 - (b) normal scan with hits: "Check the Pending tab — listings are waiting for triage."
 - Normal scan with 0 hits: "Nothing matched today. Check back tomorrow."
+
+If the user later asks "scan deeper" or "find more": re-run without `max_pages=1`:
+```bash
+curl -s -X POST -H "Referer: http://127.0.0.1:$PORT/" "http://127.0.0.1:$PORT/api/scan/start"
+```
 
 Open the dashboard:
 ```bash

@@ -172,7 +172,20 @@ def run_yad2_scan(dry_run: bool = False, bootstrap: bool = False):
 
     logger.info("Scraping %d Yad2 search URLs...", len(YAD2_SEARCH_URLS))
     seen_yad2_ids = get_all_seen_ids()
-    cards = scrape_yad2_searches(YAD2_SEARCH_URLS, seen_ids=seen_yad2_ids)
+    # Wizard / API can shortcut a scan to just page 1 via APT_RADAR_MAX_PAGES.
+    # Default 10 is the steady-state behavior; first-scan wizard sets it to 1.
+    import os
+    try:
+        max_pages = int(os.environ.get("APT_RADAR_MAX_PAGES", "10"))
+    except ValueError:
+        max_pages = 10
+    if max_pages != 10:
+        logger.info("Yad2: max_pages overridden to %d via APT_RADAR_MAX_PAGES", max_pages)
+    cards = scrape_yad2_searches(
+        YAD2_SEARCH_URLS,
+        seen_ids=seen_yad2_ids,
+        max_pages_per_url=max_pages,
+    )
     logger.info("Total Yad2 cards: %d", len(cards))
 
     stats = {"scraped": len(cards), "passed_filter": 0}
