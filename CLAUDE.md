@@ -131,6 +131,44 @@ Wait for confirmation. Then enable Facebook scanning:
 
 (The `cd` ensures we're at the repo root so `from settings import` resolves.)
 
+### Step 5c — Collect Yad2 search URL(s) in chat
+
+Walk the user through getting at least one Yad2 URL. Don't rely on them to figure out the format from the dashboard later.
+
+Tell them:
+> "I need at least one Yad2 search URL. Here's how to make one — takes 2 minutes:
+>
+> 1. Open https://www.yad2.co.il/realestate/rent in a new tab.
+> 2. Set your filters: city/area, price range, min rooms, min sqm, anything else you care about. Don't worry about map zoom — Yad2's URL bBox doesn't actually filter results.
+> 3. Click search.
+> 4. Copy the URL from the browser's address bar.
+> 5. Paste it here. If you want multiple search URLs (different cities, different rent ranges), paste each on its own line."
+
+Collect their URL(s). Save via the helper:
+
+```bash
+(cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && ./.venv/bin/python3 -c "from settings import save_settings; save_settings({'yad2_search_urls': ['<url1>', '<url2>']})")
+```
+
+### Step 5d — Target area description (FB path only)
+
+Skip if Yad2-only.
+
+Ask: "Are you targeting apartments in Old North Tel Aviv, or somewhere else?"
+
+If Old North TLV → keep the default `target_area_description` (already in settings, no action needed).
+
+If elsewhere → ask them to describe their target area in plain English/Hebrew. Examples:
+- "Florentin and Neve Tzedek only. Avoid Jaffa and Yad Eliyahu."
+- "Rehavia and Talbieh in Jerusalem. Streets: Smolenskin, Mishaelim, Marcus."
+- "Williamsburg, Brooklyn — south of Grand St, north of Broadway."
+
+Save:
+
+```bash
+(cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && ./.venv/bin/python3 -c "from settings import save_settings; save_settings({'target_area_description': '<their description>'})")
+```
+
 ### Step 6 — Start the dashboard
 
 ```bash
@@ -154,14 +192,16 @@ open "http://localhost:$PORT/settings"
 
 Ask the user: "Did the Settings page load in your browser?" Wait for confirmation — if Flask died after backgrounding, you'll catch it here rather than in Step 8.
 
-### Step 7 — Configure search criteria (in the web UI)
+### Step 7 — Confirm remaining criteria (in the web UI)
 
-Tell the user: "Fill in your criteria on the Settings page. The form has on-screen instructions for each section."
+Tell the user: "I just opened the Settings page. The Yad2 URLs and target area description you gave me are already filled in — just confirm them. Tweak the rest of the form:
+- Price range (₪/month)
+- Min rooms, sqm, bathrooms
+- (Optional) Polygon — only if you want strict geographic filtering on top of your Yad2 URLs."
 
 Default behavior worth flagging:
-- **Geographic polygon** — drives the post-scrape filter. Empty polygon = no geographic filter (all Yad2/FB results are kept). If they paste a polygon AND leave Yad2 URLs blank, the app auto-generates a Yad2 URL from the polygon's bounding box.
-- **Yad2 URLs** — pre-filled with two Tel Aviv example URLs. Israeli friends can keep or refine; non-Israeli friends should replace with their own (instructions are in the section).
-- **Facebook section** — collapsed by default. Only expands if the user picked the Yad2+FB path. The starter list inside contains 5 Tel Aviv apartment groups they can copy to active.
+- **Polygon is optional.** Most users skip it and trust Yad2's URL filter. Worth adding only if Yad2 is including out-of-area "promoted" cards.
+- **Facebook section** — collapsed unless they picked the FB path. Inside is a starter list of 5 TLV apartment groups with a "Copy to active" button.
 
 The save button has a **"Run a scan after saving"** checkbox that's checked by default — saving will kick off the first scan and redirect to the Pending tab.
 
