@@ -409,11 +409,12 @@
     </div>
 
     <div class="section">
-      <h2>Geographic area</h2>
+      <h2>Geographic filter <span style="font-weight:400;color:#78909c;">(optional, for Yad2)</span></h2>
       <p class="help">
-        The polygon filters listings <strong>after</strong> they're scraped — only listings whose
-        coordinates fall inside are kept. If you also leave the Yad2 search URLs blank below,
-        a Yad2 URL gets auto-generated from this polygon's bounding box.
+        Strict geographic filter applied to Yad2 results <strong>after</strong> scraping.
+        Useful because Yad2 sometimes returns "promoted" cards outside the geographic
+        filter set in your search URL. Leave blank to skip — the Yad2 URLs you paste
+        below will be the only geographic filter.
       </p>
 
       <p class="help" style="margin-bottom:0.5rem;font-weight:600;color:#37474f;">How to set or change the area:</p>
@@ -435,16 +436,22 @@
         <label for="geojson">New polygon (paste GeoJSON to replace)</label>
         <textarea id="geojson" name="geojson"
                   placeholder='Paste the GeoJSON FeatureCollection from geojson.io. Leave blank to keep the current polygon.'></textarea>
-        <div class="hint">Must be a valid Polygon.</div>
+        <div class="hint">Must be a valid Polygon. Leave blank to disable the geographic filter.</div>
       </div>
+    </div>
 
-      <div class="field" style="margin-top:0.75rem;">
-        <button type="button" class="btn-secondary" id="applyPolygonToYad2Btn" onclick="applyPolygonToYad2()">
-          Apply this polygon to Yad2 URLs ↓
-        </button>
-        <div class="hint" id="applyPolygonHint">
-          Replaces the Yad2 URLs below with one generated from this polygon's bounding box.
-        </div>
+    <div class="section">
+      <h2>Facebook target area <span style="font-weight:400;color:#78909c;">(optional, for Facebook)</span></h2>
+      <p class="help">
+        Free-text description of your target area. Used by Claude when classifying
+        Facebook posts — Claude reads each post's text and decides whether it matches
+        this description. Edit if you're not searching in Old North Tel Aviv.
+      </p>
+      <div class="field">
+        <textarea id="target_area_description" name="target_area_description"
+                  placeholder="e.g. The target area is Old North Tel Aviv, bounded by Bograshov to the south, Yarkon River to the north..."
+                  style="min-height:200px;">{{ settings.target_area_description }}</textarea>
+        <div class="hint">Used only for Facebook posts. Yad2 listings are filtered by the polygon above.</div>
       </div>
     </div>
 
@@ -597,31 +604,8 @@ function buildYad2UrlFromRing(ring) {
   return `https://www.yad2.co.il/realestate/rent/tel-aviv-area?minPrice=${minRent}&minRooms=${minRooms}&area=1&city=5000&bBox=${bbox}&zoom=14`;
 }
 
-function applyPolygonToYad2() {
-  const polygonTa = document.getElementById('geojson');
-  const yad2Ta = document.getElementById('yad2_search_urls');
-  const hint = document.getElementById('applyPolygonHint');
-  if (!polygonTa || !yad2Ta) return;
-
-  const text = polygonTa.value.trim();
-  if (!text) {
-    hint.textContent = "Paste a GeoJSON polygon above first, then click this button.";
-    hint.style.color = "#c62828";
-    return;
-  }
-  const ring = extractPolygon(text);
-  if (!ring) {
-    hint.textContent = "Couldn't parse the GeoJSON. Check the format (must be a FeatureCollection with a Polygon).";
-    hint.style.color = "#c62828";
-    return;
-  }
-  const newUrl = buildYad2UrlFromRing(ring);
-  yad2Ta.value = newUrl;
-  hint.textContent = "Done — Yad2 URLs replaced. Click Save settings to apply.";
-  hint.style.color = "#2e7d32";
-  // Scroll the Yad2 textarea into view so user can verify
-  yad2Ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
+// Polygon-to-Yad2-URL flow was removed in v2 — Yad2 doesn't honor URL bBox
+// (proven via live tests). Polygon is now a post-scrape filter only.
 </script>
 
 </body>

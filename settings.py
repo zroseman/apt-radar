@@ -51,6 +51,31 @@ DEFAULTS: dict = {
     # Empty by default — Facebook scraping is opt-in (requires Chrome debug setup).
     # See STARTER_FACEBOOK_GROUPS below for a curated set the user can add.
     "facebook_groups": [],
+    # Free-text description of the user's target area. Injected into the
+    # Facebook listing classifier prompt so Claude knows which neighborhoods
+    # to accept. Defaults to Old North, Tel Aviv — users elsewhere replace
+    # this via the Settings page.
+    "target_area_description": (
+        "The target area is \"Old North\" (צפון ישן) Tel Aviv, roughly bounded by:\n"
+        "  - South: Bograshov / בוגרשוב\n"
+        "  - North: Yarkon River / נהר הירקון\n"
+        "  - West: Mediterranean Sea\n"
+        "  - East: Ibn Gavirol / אבן גבירול (can go slightly east)\n"
+        "\n"
+        "Key streets IN the target area: Dizengoff, Ben Yehuda, Gordon, Frishman, "
+        "Nordau, Pinkas, Jabotinsky, Arlozorov, Hayarkon, Dubnov.\n"
+        "\n"
+        "OUTSIDE the target area (EXCLUDE): Yad Eliyahu / יד אליהו, Neve Sha'anan / "
+        "נווה שאנן, Florentin / פלורנטין, Jaffa / יפו, Shapira / שפירא, Kochav "
+        "HaTzafon / כוכב הצפון, Ramat Aviv / רמת אביב, Glilot / גלילות, Ramat "
+        "HaHayal / רמת החייל, Kiryat Shalom / קרית שלום, HaTikva / התקווה, South "
+        "TLV / דרום תל אביב, Sarona / שרונה, Lev Ha'ir (south of Bograshov), Neve "
+        "Tzedek / נווה צדק, Kerem HaTeimanim / כרם התימנים (borderline), Bavli / "
+        "בבלי (borderline).\n"
+        "\n"
+        "'צפון תל אביב' (North Tel Aviv) is ambiguous — could be Old North or "
+        "could be Kochav HaTzafon / Ramat Aviv. Check for more specific clues."
+    ),
 }
 
 

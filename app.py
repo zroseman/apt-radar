@@ -175,6 +175,7 @@ def settings_page():
             min_bathrooms = float(form["min_bathrooms"])
             sublet_ok = form.get("sublet_ok") == "on"
             facebook_enabled = form.get("facebook_enabled") == "on"
+            target_area_description = (form.get("target_area_description") or "").strip()
 
             # Cross-field validation
             if min_rent < 0 or max_rent < 0 or ideal_max_rent < 0:
@@ -222,6 +223,7 @@ def settings_page():
                 "polygon": polygon,
                 "yad2_search_urls": new_urls,
                 "facebook_groups": fb_groups,
+                "target_area_description": target_area_description,
             })
 
             # Optional: trigger a scan immediately after save (default behavior).

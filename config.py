@@ -21,6 +21,7 @@ FACEBOOK_GROUPS = list(_s["facebook_groups"])
 FACEBOOK_ENABLED = bool(_s.get("facebook_enabled", False))
 YAD2_SEARCH_URLS = list(_s["yad2_search_urls"])
 INCLUSION_POLYGON = [tuple(p) for p in _s["polygon"]]
+TARGET_AREA_DESCRIPTION = str(_s.get("target_area_description") or "")
 
 # --- Apartment search criteria ---
 # Editable fields (max_rent, min_rent, ideal_max_rent, min_rooms, min_sqm,

@@ -48,7 +48,17 @@ def _get_openai_client():
         _openai_client = OpenAI()
     return _openai_client
 
-CLASSIFICATION_PROMPT = """You are classifying a Facebook group post about apartments in Tel Aviv.
+def _build_classification_prompt() -> str:
+    """Build the classifier prompt, injecting the user's target-area description.
+
+    Loaded lazily on each call so settings changes are picked up without a
+    process restart. Not cached intentionally — the call is cheap and FB
+    scans are infrequent."""
+    from config import TARGET_AREA_DESCRIPTION
+    target_area = (TARGET_AREA_DESCRIPTION or "").strip()
+    if not target_area:
+        target_area = "(No target area configured. Set in_target_area to null and let downstream filters decide.)"
+    return f"""You are classifying a Facebook group post about apartments.
 Read the post carefully (it may be in Hebrew, English, or both) and extract structured data.
 
 IMPORTANT RULES:
@@ -58,16 +68,14 @@ IMPORTANT RULES:
 3. If it's a commercial/office space listing, set post_type to "commercial".
 4. If it's about a room in a shared apartment (roommate search), set post_type to "room_rental".
 
-For LOCATION, you must determine the actual neighborhood/area:
-- The target area is "Old North" (צפון ישן) Tel Aviv, roughly bounded by:
-  - South: Bograshov / בוגרשוב
-  - North: Yarkon River / נהר הירקון
-  - West: Mediterranean Sea
-  - East: Ibn Gavirol / אבן גבירול (can go slightly east)
-- Key streets IN the target area: Dizengoff, Ben Yehuda, Gordon, Frishman, Nordau, Pinkas, Jabotinsky, Arlozorov, Hayarkon, Dubnov, etc.
-- OUTSIDE the target area (EXCLUDE): Yad Eliyahu/יד אליהו, Neve Sha'anan/נווה שאנן, Florentin/פלורנטין, Jaffa/יפו, Shapira/שפירא, Kochav HaTzafon/כוכב הצפון, Ramat Aviv/רמת אביב, Glilot/גלילות, Ramat HaHayal/רמת החייל, Kiryat Shalom/קרית שלום, HaTikva/התקווה, South TLV/דרום תל אביב, Sarona/שרונה, Lev Ha'ir (south of Bograshov), Neve Tzedek/נווה צדק, Kerem HaTeimanim/כרם התימנים (borderline - south of Bograshov), Bavli/בבלי (borderline - could be ok)
-- If a specific address or neighborhood is mentioned, determine if it's in or out of the target area.
-- "צפון תל אביב" (North Tel Aviv) is ambiguous — could be Old North or could be Kochav HaTzafon/Ramat Aviv. Check for more specific clues.
+For LOCATION, decide whether the post's location matches the user's target area:
+
+--- USER'S TARGET AREA ---
+{target_area}
+--- END TARGET AREA ---
+
+If the post mentions a specific street, neighborhood, or address, match it against the area description above.
+If the post's location is unclear or unmentioned, set in_target_area to null (so it can be reviewed manually).
 
 For PRICE, look for:
 - Numbers near ₪, ש"ח, שח, שקל, NIS
@@ -75,7 +83,7 @@ For PRICE, look for:
 - Distinguish monthly rent from sale price (sale prices are in millions)
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{
+{{
   "post_type": "supply" | "demand" | "commercial" | "room_rental" | "other",
   "price_nis": <number or null>,
   "rooms": <number or null>,
@@ -88,7 +96,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   "is_sublet": true | false,
   "rejection_reason": "<brief reason if this clearly doesn't match>" or null,
   "summary": "<1-line Hebrew or English summary of what this post is about>"
-}
+}}
 """
 
 
@@ -120,7 +128,7 @@ class ApartmentListing:
 
 def classify_post(text: str) -> dict | None:
     """Use the configured LLM to classify and extract data from a post."""
-    prompt = f"{CLASSIFICATION_PROMPT}\n\nPOST TEXT:\n{text[:2000]}"
+    prompt = f"{_build_classification_prompt()}\n\nPOST TEXT:\n{text[:2000]}"
     try:
         provider = _llm_provider()
         if provider == "anthropic":
